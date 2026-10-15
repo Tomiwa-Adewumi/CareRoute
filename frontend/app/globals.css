@@ -1,0 +1,49 @@
+:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #14221f;
+  background: #f5f8f7;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: #f5f8f7; }
+button, input { font: inherit; }
+
+.shell { min-height: 100vh; }
+.hero {
+  padding: 72px max(24px, calc((100vw - 1100px) / 2));
+  background: linear-gradient(135deg, #0d3d35 0%, #14564c 100%);
+  color: white;
+}
+.hero h1 { max-width: 760px; margin: 12px 0 20px; font-size: clamp(42px, 7vw, 78px); line-height: .96; letter-spacing: -0.05em; }
+.hero p { max-width: 720px; font-size: 19px; line-height: 1.6; color: #d7ebe6; }
+.eyebrow { text-transform: uppercase; letter-spacing: .14em; font-size: 12px; font-weight: 800; }
+.warning { max-width: 820px; margin-top: 28px; padding: 14px 16px; border: 1px solid rgba(255,255,255,.22); background: rgba(255,255,255,.08); border-radius: 12px; font-size: 14px; }
+
+.results { max-width: 1100px; margin: 0 auto; padding: 48px 24px 80px; }
+.sectionHeading { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+.sectionHeading h2 { margin: 6px 0 0; font-size: 32px; letter-spacing: -.03em; }
+.pill, .recommended { border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 800; }
+.pill { background: #e4efec; color: #14564c; }
+.recommended { background: #d9f7e9; color: #0a6a46; }
+.cards { display: grid; gap: 16px; }
+.card { display: grid; grid-template-columns: 64px 1fr; background: white; border: 1px solid #dfe8e5; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(19, 53, 46, .06); }
+.card.best { border-color: #55aa91; box-shadow: 0 16px 44px rgba(18, 95, 76, .12); }
+.rank { display: grid; place-items: center; background: #eef5f3; font-size: 20px; font-weight: 900; color: #14564c; }
+.cardBody { padding: 24px; }
+.cardTop { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.card h3 { margin: 0; font-size: 22px; }
+.metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 22px; }
+.metrics div { padding: 14px; background: #f6f9f8; border-radius: 12px; }
+.metrics strong { display: block; font-size: 24px; }
+.metrics span { color: #65736f; font-size: 12px; }
+.explanation { margin: 18px 0 4px; }
+.freshness { margin: 0; color: #74817e; font-size: 13px; }
+.error { padding: 14px 16px; margin-bottom: 16px; border-radius: 12px; background: #fff1f0; color: #8a2019; }
+
+@media (max-width: 650px) {
+  .hero { padding-top: 52px; }
+  .sectionHeading { align-items: flex-start; flex-direction: column; }
+  .metrics { grid-template-columns: 1fr; }
+  .card { grid-template-columns: 48px 1fr; }
+  .cardTop { align-items: flex-start; flex-direction: column; }
+}
