@@ -19,7 +19,7 @@ class RecommendationServiceTest {
 
         var ranked = service.rank(List.of(slower, faster));
 
-        assertThat(ranked.getFirst().hospital().id()).isEqualTo("a");
+        assertThat(ranked.get(0).hospital().id()).isEqualTo("a");
     }
 
     @Test
@@ -30,7 +30,7 @@ class RecommendationServiceTest {
 
         var ranked = service.rank(List.of(stale, fresh));
 
-        assertThat(ranked.getFirst().hospital().id()).isEqualTo("fresh");
-        assertThat(ranked.get(1).score()).isGreaterThan(ranked.getFirst().score());
+        assertThat(ranked.get(0).hospital().id()).isEqualTo("fresh");
+        assertThat(ranked.get(1).score()).isGreaterThan(ranked.get(0).score());
     }
 }
