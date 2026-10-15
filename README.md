@@ -1,57 +1,95 @@
 # CareRoute
 
-CareRoute is an explainable decision-support application for comparing nearby emergency departments using travel time, reported wait time, and data freshness.
+CareRoute is an explainable decision-support application for comparing emergency departments using reported wait time, estimated travel time, and data freshness.
 
-> **Safety:** CareRoute does not diagnose symptoms or replace emergency services. If someone may be experiencing a medical emergency, call 911 or go to the nearest emergency department.
+> **Safety:** CareRoute does not diagnose symptoms or replace emergency services. If someone may be experiencing a medical emergency, call 911 or go to the nearest emergency department. ERs triage by medical severity, not arrival order.
 
 ## What makes it different
 
-Most wait-time tools show hospital data independently. CareRoute ranks options by **estimated time-to-care** and explains the tradeoff behind each recommendation.
-
-Current MVP score:
+CareRoute does more than display a wait-time table. It continuously ingests public ER wait data, stores timestamped observations, and ranks options with an explainable score.
 
 ```text
 score = reported wait minutes + travel minutes + stale-data penalty
 ```
 
-The scoring model is deliberately deterministic and explainable. Future ML forecasting will estimate near-future wait times from historical observations, while AI can summarize the recommendation without making medical decisions.
+The scoring model is deliberately deterministic. Future ML forecasting will estimate the wait at expected arrival time from the observation history; AI can explain evidence but will not diagnose or decide whether emergency care is necessary.
 
 ## Stack
 
 - **Frontend:** Next.js 16 + TypeScript
 - **Backend:** Java 17 + Spring Boot 4.1
+- **Database:** Supabase Postgres
+- **Migrations:** Flyway
+- **Persistence:** Spring Data JPA
+- **Live data:** adapter-based ingestion; initial source is ER Compass' public current-wait endpoint
 - **CI:** GitHub Actions
 - **Frontend hosting:** Vercel
-- **Backend hosting:** Render-compatible Java service
-- **Planned database:** PostgreSQL / Neon
+- **Backend hosting:** Render-compatible container
+
+## Data flow
+
+```text
+public ER feeds / aggregators
+          ↓
+   ingestion adapters
+          ↓
+ normalize + validate
+          ↓
+  Supabase Postgres
+  ├── hospitals
+  └── wait_time_observations
+          ↓
+ latest observation per hospital
+          ↓
+ recommendation engine
+          ↓
+   Spring Boot REST API
+          ↓
+      Next.js UI
+```
+
+The backend currently polls Ontario data every 10 minutes and persists Toronto observations. The adapter boundary is intentional: direct hospital-specific sources can be added without changing the persistence or recommendation layers.
 
 ## Repository structure
 
 ```text
 CareRoute/
-├── frontend/              # Next.js application
-├── backend/               # Spring Boot REST API
-├── .github/workflows/     # CI pipeline
+├── frontend/
+├── backend/
+│   └── src/main/resources/db/migration/
+├── .github/workflows/
 └── README.md
 ```
 
-## Run locally
+## Backend configuration
 
-### Backend
+Supabase recommends a direct connection or Session Pooler for persistent Spring/JPA backends, with SSL required. Keep the database URL in an environment variable rather than source control.
+
+```text
+SUPABASE_DB_URL=jdbc:postgresql://...:5432/postgres?user=...&password=...&sslmode=require
+CAREROUTE_INGESTION_CITY=Toronto
+CAREROUTE_INGESTION_INTERVAL_MS=600000
+CAREROUTE_ALLOWED_ORIGINS=https://your-vercel-domain.vercel.app
+```
+
+Run locally:
 
 ```bash
 cd backend
 mvn spring-boot:run
 ```
 
-The API runs at `http://localhost:8080`.
+API:
 
 ```text
 GET /api/recommendations
+GET /api/recommendations?lat=43.6532&lng=-79.3832
 GET /actuator/health
 ```
 
-### Frontend
+When latitude/longitude are supplied, the MVP estimates travel time using straight-line distance plus a conservative city-speed assumption. A routing provider is a later milestone.
+
+## Frontend
 
 ```bash
 cd frontend
@@ -59,42 +97,37 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`.
-
-For a deployed backend, set:
+For a deployed backend:
 
 ```text
 NEXT_PUBLIC_API_BASE_URL=https://your-api-host.example.com
 ```
 
-For the backend, set the allowed frontend origin with:
+## Implemented
 
-```text
-CAREROUTE_ALLOWED_ORIGINS=https://your-vercel-domain.vercel.app
-```
-
-## MVP implemented
-
-- Java domain model for hospital recommendation inputs
+- Java/Spring Boot REST backend
 - deterministic recommendation engine
-- travel + wait + freshness scoring
-- human-readable ranking explanations
-- REST API
-- responsive Next.js recommendation dashboard
-- Spring Boot health endpoint
-- backend unit tests
-- GitHub Actions backend test + frontend build pipeline
+- wait + travel + freshness scoring
+- scheduled live wait-time ingestion
+- resilient JSON normalization for external feed fields
+- Toronto filtering
+- Supabase/Postgres schema
+- Flyway migrations
+- JPA persistence and latest-observation queries
+- historical wait-time snapshots
+- responsive Next.js dashboard
+- health endpoint and CI
 
-## Next engineering milestones
+## Next milestones
 
-1. Replace seed hospitals with a provider-based ingestion interface.
-2. Add PostgreSQL for hospitals and timestamped wait observations.
-3. Add Toronto public/hospital data adapters with normalization and retries.
-4. Add geospatial routing/travel-time integration.
-5. Add Redis caching and source-health/data-freshness monitoring.
-6. Train a wait-time forecasting model from historical observations.
+1. Create the dedicated CareRoute Supabase project and apply the migration.
+2. Add direct first-party adapters where practical, starting with UHN/Sunnybrook.
+3. Replace approximate travel time with a routing API.
+4. Add source-health, retries/backoff, deduplication, and stale-feed alerts.
+5. Add Redis caching for recommendation reads.
+6. Train wait-at-arrival forecasts from historical observations.
 7. Add observability, rate limiting, and deployment environments.
 
 ## Product principle
 
-AI explains evidence; it does not diagnose the patient or decide whether emergency care is medically necessary.
+AI explains evidence; it does not diagnose the patient or determine whether emergency care is medically necessary.
