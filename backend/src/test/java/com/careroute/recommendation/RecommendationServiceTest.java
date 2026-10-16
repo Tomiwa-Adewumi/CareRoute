@@ -14,8 +14,8 @@ class RecommendationServiceTest {
     @Test
     void ranksLowerExpectedTimeToCareFirst() {
         Instant now = Instant.now();
-        Hospital faster = new Hospital("a", "Faster", 60, 10, now, true, false);
-        Hospital slower = new Hospital("b", "Slower", 80, 15, now, true, false);
+        Hospital faster = new Hospital("a", "Faster", 60, 60, 4, "LINEAR_REGRESSION_V1", 10, now, true, false);
+        Hospital slower = new Hospital("b", "Slower", 80, 80, 4, "LINEAR_REGRESSION_V1", 15, now, true, false);
 
         var ranked = service.rank(List.of(slower, faster));
 
@@ -25,8 +25,8 @@ class RecommendationServiceTest {
     @Test
     void staleDataReceivesPenalty() {
         Instant now = Instant.now();
-        Hospital fresh = new Hospital("fresh", "Fresh", 60, 10, now, true, false);
-        Hospital stale = new Hospital("stale", "Stale", 60, 10, now.minusSeconds(60 * 60), true, false);
+        Hospital fresh = new Hospital("fresh", "Fresh", 60, 60, 4, "LINEAR_REGRESSION_V1", 10, now, true, false);
+        Hospital stale = new Hospital("stale", "Stale", 60, 60, 4, "LINEAR_REGRESSION_V1", 10, now.minusSeconds(60 * 60), true, false);
 
         var ranked = service.rank(List.of(stale, fresh));
 

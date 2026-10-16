@@ -12,10 +12,13 @@ import java.util.List;
 public class LiveHospitalService {
     private final HospitalRepository hospitals;
     private final WaitTimeObservationRepository observations;
+    private final WaitTimeForecastService forecastService;
 
-    public LiveHospitalService(HospitalRepository hospitals, WaitTimeObservationRepository observations) {
+    public LiveHospitalService(HospitalRepository hospitals, WaitTimeObservationRepository observations,
+                               WaitTimeForecastService forecastService) {
         this.hospitals = hospitals;
         this.observations = observations;
+        this.forecastService = forecastService;
     }
 
     public List<Hospital> latest(double userLat, double userLng, boolean hasLocation) {
@@ -25,10 +28,15 @@ public class LiveHospitalService {
                 int travelMinutes = hasLocation
                         ? estimateTravelMinutes(userLat, userLng, hospital.getLatitude(), hospital.getLongitude())
                         : 0;
+                var forecast = forecastService.predict(
+                        observations.findTop20ByHospital_IdOrderByObservedAtDesc(hospital.getId()), travelMinutes);
                 result.add(new Hospital(
                         hospital.getId(),
                         hospital.getName(),
                         observation.getWaitMinutes(),
+                        forecast.predictedWaitMinutes(),
+                        forecast.sampleCount(),
+                        forecast.model(),
                         travelMinutes,
                         observation.getObservedAt(),
                         hospital.isEmergencyDepartment(),

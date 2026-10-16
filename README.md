@@ -1,6 +1,6 @@
 # CareRoute
 
-CareRoute is an explainable decision-support application for comparing emergency departments using reported wait time, estimated travel time, and data freshness.
+CareRoute is an explainable ML decision-support application for comparing emergency departments using predicted wait-at-arrival time, estimated travel time, and data freshness.
 
 > **Safety:** CareRoute does not diagnose symptoms or replace emergency services. If someone may be experiencing a medical emergency, call 911 or go to the nearest emergency department. ERs triage by medical severity, not arrival order.
 
@@ -9,10 +9,14 @@ CareRoute is an explainable decision-support application for comparing emergency
 CareRoute does more than display a wait-time table. It continuously ingests public ER wait data, stores timestamped observations, and ranks options with an explainable score.
 
 ```text
-score = reported wait minutes + travel minutes + stale-data penalty
+score = predicted wait-at-arrival minutes + travel minutes + stale-data penalty
 ```
 
-The scoring model is deliberately deterministic. Future ML forecasting will estimate the wait at expected arrival time from the observation history; AI can explain evidence but will not diagnose or decide whether emergency care is necessary.
+## Where ML/AI is used
+
+CareRoute uses an **explainable per-hospital linear-regression model**. For each hospital, the backend loads up to 20 recent wait-time observations, fits wait minutes against observation time, and projects the wait forward by the visitor's estimated travel time. Predictions are bounded to avoid unstable extrapolation when the history is sparse or volatile. With fewer than three observations, the system explicitly falls back to the current reported wait.
+
+This is classical machine learning, not generative AI. No LLM is currently used, and no model diagnoses symptoms or decides whether someone needs emergency care. The model name, sample count, current wait, predicted wait, travel estimate, and final score are returned by the API and shown in the interface so the recommendation remains auditable.
 
 ## Stack
 
@@ -23,7 +27,7 @@ The scoring model is deliberately deterministic. Future ML forecasting will esti
 - **Persistence:** Spring Data JPA
 - **Live data:** adapter-based ingestion; initial source is ER Compass' public current-wait endpoint
 - **CI:** GitHub Actions
-- **Frontend hosting:** Vercel
+- **Frontend hosting:** Render Static Site
 - **Backend hosting:** Render-compatible container
 
 ## Data flow
@@ -40,6 +44,9 @@ public ER feeds / aggregators
   └── wait_time_observations
           ↓
  latest observation per hospital
+          ↓
+ linear-regression forecast
+  at expected arrival time
           ↓
  recommendation engine
           ↓
@@ -91,7 +98,7 @@ GET /api/recommendations?lat=43.6532&lng=-79.3832
 GET /actuator/health
 ```
 
-When latitude/longitude are supplied, the MVP estimates travel time using straight-line distance plus a conservative city-speed assumption. A routing provider is a later milestone.
+The frontend requests browser geolocation on load and passes latitude/longitude to the API. The MVP estimates travel time using straight-line distance plus a conservative city-speed assumption. Location is used for the request and is not stored. A routing provider is a later milestone.
 
 ## Frontend
 
@@ -110,12 +117,13 @@ NEXT_PUBLIC_API_BASE_URL=https://your-api-host.example.com
 ## Implemented
 
 - Java/Spring Boot REST backend
-- deterministic recommendation engine
-- wait + travel + freshness scoring
+- explainable linear-regression wait forecasting from recent observations
+- predicted wait-at-arrival + travel + freshness scoring
+- browser geolocation with a privacy-preserving no-location fallback
 - scheduled live wait-time ingestion
 - resilient JSON normalization for external feed fields
 - Toronto filtering
-- Supabase/Postgres schema
+- PostgreSQL schema
 - Flyway migrations
 - JPA persistence and latest-observation queries
 - historical wait-time snapshots
@@ -129,7 +137,7 @@ NEXT_PUBLIC_API_BASE_URL=https://your-api-host.example.com
 3. Replace approximate travel time with a routing API.
 4. Add source-health, retries/backoff, deduplication, and stale-feed alerts.
 5. Add Redis caching for recommendation reads.
-6. Train wait-at-arrival forecasts from historical observations.
+6. Evaluate the forecast against held-out observations and add MAE/RMSE model monitoring.
 7. Add observability, rate limiting, and deployment environments.
 
 ## Product principle

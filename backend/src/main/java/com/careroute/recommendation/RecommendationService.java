@@ -20,11 +20,11 @@ public class RecommendationService {
     Recommendation score(Hospital hospital) {
         long ageMinutes = Math.max(0, Duration.between(hospital.observedAt(), Instant.now()).toMinutes());
         double freshnessPenalty = Math.min(ageMinutes, 120) * 0.20;
-        double score = hospital.waitMinutes() + hospital.travelMinutes() + freshnessPenalty;
+        double score = hospital.predictedWaitMinutes() + hospital.travelMinutes() + freshnessPenalty;
 
-        String explanation = "%d min travel + %d min reported wait%s".formatted(
+        String explanation = "%d min travel + %d min predicted wait%s".formatted(
                 hospital.travelMinutes(),
-                hospital.waitMinutes(),
+                hospital.predictedWaitMinutes(),
                 freshnessPenalty > 0 ? " + stale-data penalty" : "");
 
         return new Recommendation(hospital, Math.round(score * 10.0) / 10.0, explanation);
