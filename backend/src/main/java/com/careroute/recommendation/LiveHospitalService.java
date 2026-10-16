@@ -46,7 +46,7 @@ public class LiveHospitalService {
         return result;
     }
 
-    private int estimateTravelMinutes(double userLat, double userLng, Double hospitalLat, Double hospitalLng) {
+    int estimateTravelMinutes(double userLat, double userLng, Double hospitalLat, Double hospitalLng) {
         if (hospitalLat == null || hospitalLng == null) return 0;
         double earthKm = 6371.0;
         double latDistance = Math.toRadians(hospitalLat - userLat);

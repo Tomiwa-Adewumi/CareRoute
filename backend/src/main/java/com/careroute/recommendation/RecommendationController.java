@@ -23,7 +23,8 @@ public class RecommendationController {
     public List<RecommendationService.Recommendation> recommendations(
             @RequestParam(required = false) Double lat,
             @RequestParam(required = false) Double lng) {
-        boolean hasLocation = lat != null && lng != null;
+        boolean hasLocation = lat != null && lng != null
+                && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
         List<Hospital> hospitals = liveHospitalService.latest(
                 hasLocation ? lat : 0.0,
                 hasLocation ? lng : 0.0,

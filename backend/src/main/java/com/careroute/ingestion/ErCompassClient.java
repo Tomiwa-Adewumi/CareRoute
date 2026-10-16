@@ -17,7 +17,8 @@ public class ErCompassClient {
     private static final Map<String, double[]> TORONTO_COORDINATES = Map.of(
             "sunnybrook-health-sciences-centre", new double[]{43.7226, -79.3748},
             "university-health-network-toronto-western-hospital", new double[]{43.6537, -79.4055},
-            "university-health-network-toronto-general-hospital", new double[]{43.6596, -79.3889});
+            "university-health-network-toronto-general-hospital", new double[]{43.6596, -79.3889},
+            "trillium-health-partners-queensway-health-centre", new double[]{43.5932, -79.5441});
 
     private final RestClient restClient;
     private final String endpoint;

@@ -1,22 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-type Recommendation = {
-  hospital: {
-    id: string;
-    name: string;
-    waitMinutes: number;
-    predictedWaitMinutes: number;
-    forecastSampleCount: number;
-    forecastModel: string;
-    travelMinutes: number;
-    observedAt: string;
-  };
-  score: number;
-  explanation: string;
-};
-
+type Recommendation = { hospital: { id: string; name: string; waitMinutes: number; predictedWaitMinutes: number; forecastSampleCount: number; forecastModel: string; travelMinutes: number; observedAt: string }; score: number; explanation: string };
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://careroute-api-main.onrender.com";
 
 export default function Home() {
@@ -24,101 +10,117 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [locationStatus, setLocationStatus] = useState("Requesting your location…");
+  const [hasLocation, setHasLocation] = useState(false);
 
-  const loadRecommendations = (lat?: number, lng?: number) => {
+  const loadRecommendations = useCallback((lat?: number, lng?: number) => {
     setLoading(true);
     const query = lat !== undefined && lng !== undefined ? `?lat=${lat}&lng=${lng}` : "";
     return fetch(`${apiBase}/api/recommendations${query}`)
-      .then((response) => {
-        if (!response.ok) throw new Error("Recommendation API unavailable");
-        return response.json();
-      })
-      .then((items: Recommendation[]) => {
-        setRecommendations(items);
-        setError(null);
-      })
+      .then((response) => { if (!response.ok) throw new Error("Recommendation API unavailable"); return response.json(); })
+      .then((items: Recommendation[]) => { setRecommendations(items); setError(null); })
       .catch((err: Error) => setError(err.message))
       .finally(() => setLoading(false));
-  };
+  }, []);
 
-  useEffect(() => {
+  const requestLocation = useCallback(() => {
     if (!("geolocation" in navigator)) {
-      setLocationStatus("Location is unavailable in this browser; showing waits without travel estimates.");
+      setLocationStatus("Location unavailable · showing reported waits");
+      setHasLocation(false);
       void loadRecommendations();
       return;
     }
-
+    setLocationStatus("Requesting your location…");
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        setLocationStatus("Using your current location for travel estimates.");
-        void loadRecommendations(coords.latitude, coords.longitude);
-      },
-      () => {
-        setLocationStatus("Location was not shared; showing waits without personalized travel estimates.");
-        void loadRecommendations();
-      },
+      ({ coords }) => { setHasLocation(true); setLocationStatus("Location enabled · used only for this request"); void loadRecommendations(coords.latitude, coords.longitude); },
+      () => { setHasLocation(false); setLocationStatus("Location not shared · showing non-personalized estimates"); void loadRecommendations(); },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
     );
-  }, []);
+  }, [loadRecommendations]);
+
+  useEffect(() => requestLocation(), [requestLocation]);
 
   return (
-    <main className="shell">
-      <section className="hero">
-        <div className="eyebrow">Emergency care decision support</div>
-        <h1>Find the fastest path to emergency care.</h1>
-        <p>
-          CareRoute ranks nearby emergency departments using travel time, reported wait time,
-          a wait-at-arrival forecast, and data freshness — then explains the tradeoff.
-        </p>
-        <div className="warning">
-          CareRoute does not diagnose medical conditions. If you may be experiencing a medical emergency, call 911.
+    <main>
+      <header className="topbar">
+        <a className="brand" href="#top" aria-label="CareRoute home"><span className="brandMark">C</span><span>CareRoute</span></a>
+        <nav aria-label="Page navigation"><a href="#recommendations">Recommendations</a><a href="#model">How the model works</a></nav>
+        <span className="prototypeBadge">Toronto prototype</span>
+      </header>
+
+      <section className="hero" id="top">
+        <div className="heroCopy">
+          <div className="eyebrow light">Explainable emergency-care navigation</div>
+          <h1>Not just the shortest wait. The shortest path to care.</h1>
+          <p className="heroLead">CareRoute forecasts the wait when you arrive, adds travel time and data freshness, then shows exactly why each emergency department ranked where it did.</p>
+          <div className="heroActions">
+            <a className="primaryButton" href="#recommendations">See live recommendations <span>↓</span></a>
+            <button className="locationButton" onClick={requestLocation} type="button"><span className={`statusDot ${hasLocation ? "active" : ""}`} />{locationStatus}</button>
+          </div>
+          <p className="privacyNote">Your coordinates are sent with one API request and are never stored.</p>
         </div>
 
-        <div className="locationStatus">{locationStatus}</div>
-        <aside className="modelCard">
-          <div className="eyebrow">AI / ML in this project</div>
-          <strong>Explainable wait-at-arrival forecasting</strong>
-          <p>CareRoute trains a bounded linear-regression model on each hospital’s latest observations. It projects the wait when you are expected to arrive, then combines that prediction with travel time and data freshness. No LLM makes medical decisions.</p>
-        </aside>
+        <div className="heroModel" aria-label="CareRoute scoring pipeline">
+          <div className="modelHeader"><span>Decision pipeline</span><span className="liveTag"><i /> Live data</span></div>
+          <div className="pipeline">
+            <div><span className="stepNumber">01</span><strong>Observe</strong><small>Recent wait-time history</small></div>
+            <div><span className="stepNumber">02</span><strong>Forecast</strong><small>Per-hospital OLS regression</small></div>
+            <div><span className="stepNumber">03</span><strong>Rank</strong><small>Wait + travel + freshness</small></div>
+          </div>
+          <div className="formulaCard"><span>Ranking objective</span><code>S(h) = ŷ<sub>arrival</sub> + t<sub>travel</sub> + 0.2 · min(age, 120)</code><p>Lower is better. Every term is returned by the API.</p></div>
+        </div>
       </section>
 
-      <section className="results">
-        <div className="sectionHeading">
-          <div>
-            <div className="eyebrow">Toronto MVP</div>
-            <h2>Recommended emergency departments</h2>
-          </div>
-          <span className="pill">Explainable ranking</span>
-        </div>
+      <aside className="safetyBar"><strong>Medical safety:</strong> CareRoute does not diagnose or replace emergency services. If someone may be experiencing a medical emergency, call 911.</aside>
 
-        {loading && <div className="error">Loading current Toronto emergency department data…</div>}
-        {error && <div className="error">{error}. The free API may need about a minute to wake up.</div>}
-        {!loading && !error && recommendations.length === 0 && (
-          <div className="error">Current Toronto wait-time data is temporarily unavailable. Please try again shortly.</div>
-        )}
+      <section className="results section" id="recommendations">
+        <div className="sectionHeading">
+          <div><div className="eyebrow">Live decision support</div><h2>Emergency departments, ranked</h2><p>Lower CareRoute scores indicate a shorter estimated total path to care.</p></div>
+          <span className="dataPill"><i /> ER data refreshes every 10 min</span>
+        </div>
+        <div className={`personalizationBanner ${hasLocation ? "active" : ""}`}>
+          <span className={`statusDot ${hasLocation ? "active" : ""}`} />
+          {hasLocation
+            ? "Personalized ranking is active: travel time from your current location is included in every score and forecast horizon below."
+            : "Location is not active: travel is excluded. Enable location above to personalize the ranking."}
+        </div>
+        {loading && <div className="notice loadingNotice"><span className="spinner" /> Waking the API and loading Toronto data…</div>}
+        {error && <div className="notice errorNotice">{error}. The free API may need about a minute to wake up.</div>}
+        {!loading && !error && recommendations.length === 0 && <div className="notice errorNotice">Current Toronto wait-time data is temporarily unavailable. Please try again shortly.</div>}
 
         <div className="cards">
-          {recommendations.map((item, index) => (
-            <article className={`card ${index === 0 ? "best" : ""}`} key={item.hospital.id}>
-              <div className="rank">#{index + 1}</div>
-              <div className="cardBody">
-                <div className="cardTop">
-                  <h3>{item.hospital.name}</h3>
-                  {index === 0 && <span className="recommended">Best option</span>}
-                </div>
-                <div className="metrics four">
-                  <div><strong>{item.hospital.travelMinutes}</strong><span>min travel</span></div>
-                  <div><strong>{item.hospital.waitMinutes}</strong><span>reported wait</span></div>
-                  <div><strong>{item.hospital.predictedWaitMinutes}</strong><span>predicted at arrival</span></div>
-                  <div><strong>{Math.round(item.score)}</strong><span>CareRoute score</span></div>
-                </div>
-                <p className="explanation">{item.explanation}</p>
-                <p className="freshness">Model: {item.hospital.forecastModel.replaceAll("_", " ")} · {item.hospital.forecastSampleCount} samples · Updated {new Date(item.hospital.observedAt).toLocaleTimeString()}</p>
+          {recommendations.map((item, index) => {
+            const isForecast = item.hospital.forecastModel === "LINEAR_REGRESSION_V1";
+            return <article className={`card ${index === 0 ? "best" : ""}`} key={item.hospital.id}>
+              <div className="cardHeader">
+                <div className="rankBlock"><span>Rank</span><strong>{String(index + 1).padStart(2, "0")}</strong></div>
+                <div className="hospitalTitle"><div className="cardLabels">{index === 0 && <span className="recommended">Best estimated option</span>}<span className={`modelState ${isForecast ? "active" : ""}`}>{isForecast ? "Forecast active" : "Collecting history"}</span></div><h3>{item.hospital.name}</h3></div>
+                <div className="scoreBlock"><strong>{Math.round(item.score)}</strong><span>total score</span></div>
               </div>
-            </article>
-          ))}
+              <div className="metricGrid">
+                <div><span>{hasLocation ? "Travel from you" : "Travel excluded"}</span><strong>{hasLocation ? item.hospital.travelMinutes : "—"}<small>{hasLocation ? " min" : ""}</small></strong></div>
+                <div><span>Reported wait</span><strong>{item.hospital.waitMinutes}<small> min</small></strong></div>
+                <div className="prediction"><span>Predicted at arrival</span><strong>{item.hospital.predictedWaitMinutes}<small> min</small></strong></div>
+                <div><span>Model evidence</span><strong>{item.hospital.forecastSampleCount}<small> samples</small></strong></div>
+              </div>
+              <div className="explanationRow"><p><b>Why this rank:</b> {item.explanation}</p><time dateTime={item.hospital.observedAt}>Updated {new Date(item.hospital.observedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time></div>
+            </article>;
+          })}
         </div>
       </section>
+
+      <section className="modelSection" id="model">
+        <div className="section modelLayout">
+          <div className="modelIntro"><div className="eyebrow light">Under the hood</div><h2>Small model.<br />Clear reasoning.</h2><p>CareRoute uses ordinary least squares—not an LLM—to learn a local trend for each hospital. The design favors interpretability, safe fallbacks, and measurable behavior.</p><a href="https://github.com/Tomiwa-Adewumi/CareRoute#the-math" target="_blank" rel="noreferrer">Read the model documentation ↗</a></div>
+          <div className="mathPanel">
+            <div className="mathStep"><span>1</span><div><strong>Represent the history</strong><p>x = minutes since the oldest observation<br />y = reported wait in minutes</p></div></div>
+            <div className="mathStep"><span>2</span><div><strong>Fit the trend</strong><code>β₁ = Σ(xᵢ−x̄)(yᵢ−ȳ) / Σ(xᵢ−x̄)²</code></div></div>
+            <div className="mathStep"><span>3</span><div><strong>Forecast arrival</strong><code>ŷ = ȳ + β₁(x<sub>arrival</sub> − x̄)</code></div></div>
+            <div className="mathStep"><span>4</span><div><strong>Apply guardrails</strong><p>Require ≥3 samples; clamp predictions to [0, 720] and within ±60 minutes of the latest wait.</p></div></div>
+          </div>
+        </div>
+      </section>
+
+      <footer><div><strong>CareRoute</strong><span>Explainable ML for a real public-service decision.</span></div><p>Prototype only · Not medical advice · Toronto, Ontario</p></footer>
     </main>
   );
 }
