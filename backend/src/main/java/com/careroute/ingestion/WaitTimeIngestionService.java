@@ -8,12 +8,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.util.Locale;
 
 @Service
 public class WaitTimeIngestionService {
+    private static final Logger log = LoggerFactory.getLogger(WaitTimeIngestionService.class);
     private final ErCompassClient client;
     private final HospitalRepository hospitals;
     private final WaitTimeObservationRepository observations;
@@ -33,7 +36,9 @@ public class WaitTimeIngestionService {
     @Transactional
     public void ingest() {
         Instant collectedAt = Instant.now();
-        for (ErCompassClient.LiveWait live : client.fetchCurrent()) {
+        var liveWaits = client.fetchCurrent();
+        int saved = 0;
+        for (ErCompassClient.LiveWait live : liveWaits) {
             if (live.city() == null || !live.city().toLowerCase(Locale.ROOT).contains(city.toLowerCase(Locale.ROOT))) {
                 continue;
             }
@@ -45,6 +50,8 @@ public class WaitTimeIngestionService {
 
             observations.save(new WaitTimeObservationEntity(
                     hospital, live.waitMinutes(), live.observedAt(), collectedAt, "ER_COMPASS", live.sourceUrl()));
+            saved++;
         }
+        log.info("CareRoute ingestion saved {} Toronto observations from {} available rows", saved, liveWaits.size());
     }
 }

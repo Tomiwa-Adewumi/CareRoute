@@ -1,6 +1,6 @@
 package com.careroute.ingestion;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import tools.jackson.databind.JsonNode;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -14,13 +14,16 @@ import java.util.regex.Pattern;
 @Component
 public class ErCompassClient {
     private static final Pattern HOURS_MINUTES = Pattern.compile("(?:(\\d+)\\s*h)?\\s*(?:(\\d+)\\s*m(?:in)?)?", Pattern.CASE_INSENSITIVE);
+    private static final Map<String, double[]> TORONTO_COORDINATES = Map.of(
+            "sunnybrook-health-sciences-centre", new double[]{43.7226, -79.3748},
+            "university-health-network-toronto-western-hospital", new double[]{43.6537, -79.4055},
+            "university-health-network-toronto-general-hospital", new double[]{43.6596, -79.3889});
 
     private final RestClient restClient;
     private final String endpoint;
 
-    public ErCompassClient(RestClient.Builder builder,
-                           @Value("${careroute.ingestion.ercompass-url:https://ercompass.ca/api/current?province=ON&sort=wait}") String endpoint) {
-        this.restClient = builder.build();
+    public ErCompassClient(@Value("${careroute.ingestion.ercompass-url:https://ercompass.ca/api/current?province=ON&sort=wait}") String endpoint) {
+        this.restClient = RestClient.create();
         this.endpoint = endpoint;
     }
 
@@ -37,11 +40,18 @@ public class ErCompassClient {
             String city = text(row, "city", "municipality");
             Integer waitMinutes = integer(row, "wait_minutes", "waitMinutes", "current_wait_minutes", "currentWaitMinutes", "wait");
             if (name == null || waitMinutes == null || waitMinutes < 0) continue;
+            String id = slug(name);
+            double[] fallbackCoordinates = TORONTO_COORDINATES.get(id);
+            Double latitude = decimal(row, "latitude", "lat");
+            Double longitude = decimal(row, "longitude", "lng", "lon");
+            if (fallbackCoordinates != null) {
+                if (latitude == null) latitude = fallbackCoordinates[0];
+                if (longitude == null) longitude = fallbackCoordinates[1];
+            }
 
             waits.add(new LiveWait(
-                    slug(name), name, city, text(row, "province"), text(row, "address"),
-                    decimal(row, "latitude", "lat"), decimal(row, "longitude", "lng", "lon"),
-                    waitMinutes, instant(row, "observed_at", "updated_at", "last_updated", "timestamp"), endpoint));
+                    id, name, city, text(row, "province"), text(row, "address"), latitude, longitude,
+                    waitMinutes, instant(row, "observed_at", "as_of", "fetched_at", "updated_at", "last_updated", "timestamp"), endpoint));
         }
         return waits;
     }
@@ -77,7 +87,7 @@ public class ErCompassClient {
         for (String key : keys) {
             JsonNode value = row.get(key);
             if (value == null || value.isNull()) continue;
-            if (value.isInt() || value.isLong()) return value.asInt();
+            if (value.isNumber()) return value.asInt();
             String raw = value.asText().trim();
             try { return Integer.parseInt(raw); } catch (NumberFormatException ignored) {}
             Matcher matcher = HOURS_MINUTES.matcher(raw);

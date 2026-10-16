@@ -1,0 +1,6 @@
+backend/target/
+frontend/.next/
+frontend/out/
+frontend/node_modules/
+work/
+.DS_Store

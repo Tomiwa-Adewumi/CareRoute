@@ -18,7 +18,7 @@ The scoring model is deliberately deterministic. Future ML forecasting will esti
 
 - **Frontend:** Next.js 16 + TypeScript
 - **Backend:** Java 17 + Spring Boot 4.1
-- **Database:** Supabase Postgres
+- **Database:** PostgreSQL (Neon recommended for durable free-tier storage)
 - **Migrations:** Flyway
 - **Persistence:** Spring Data JPA
 - **Live data:** adapter-based ingestion; initial source is ER Compass' public current-wait endpoint
@@ -35,7 +35,7 @@ public ER feeds / aggregators
           ↓
  normalize + validate
           ↓
-  Supabase Postgres
+     PostgreSQL
   ├── hospitals
   └── wait_time_observations
           ↓
@@ -63,10 +63,14 @@ CareRoute/
 
 ## Backend configuration
 
-Supabase recommends a direct connection or Session Pooler for persistent Spring/JPA backends, with SSL required. Keep the database URL in an environment variable rather than source control.
+CareRoute runs with an in-memory H2 demo database when no database variables are set, so preview deployments can start immediately. For durable history, use a managed PostgreSQL provider such as Neon and keep credentials in deployment secrets.
 
 ```text
-SUPABASE_DB_URL=jdbc:postgresql://...:5432/postgres?user=...&password=...&sslmode=require
+DATABASE_URL=jdbc:postgresql://.../neondb?sslmode=require
+DATABASE_USERNAME=...
+DATABASE_PASSWORD=...
+FLYWAY_ENABLED=true
+DB_DDL_AUTO=validate
 CAREROUTE_INGESTION_CITY=Toronto
 CAREROUTE_INGESTION_INTERVAL_MS=600000
 CAREROUTE_ALLOWED_ORIGINS=https://your-vercel-domain.vercel.app
@@ -120,7 +124,7 @@ NEXT_PUBLIC_API_BASE_URL=https://your-api-host.example.com
 
 ## Next milestones
 
-1. Create the dedicated CareRoute Supabase project and apply the migration.
+1. Connect a durable Neon PostgreSQL database for long-term observation history.
 2. Add direct first-party adapters where practical, starting with UHN/Sunnybrook.
 3. Replace approximate travel time with a routing API.
 4. Add source-health, retries/backoff, deduplication, and stale-feed alerts.

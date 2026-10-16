@@ -29,5 +29,3 @@ create index if not exists idx_wait_observations_hospital_observed
 create index if not exists idx_hospitals_active_province
     on hospitals(active, province);
 
-alter table hospitals enable row level security;
-alter table wait_time_observations enable row level security;

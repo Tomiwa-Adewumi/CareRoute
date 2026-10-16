@@ -14,11 +14,12 @@ type Recommendation = {
   explanation: string;
 };
 
-const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://careroute-api-main.onrender.com";
 
 export default function Home() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch(`${apiBase}/api/recommendations`)
@@ -26,8 +27,12 @@ export default function Home() {
         if (!response.ok) throw new Error("Recommendation API unavailable");
         return response.json();
       })
-      .then(setRecommendations)
-      .catch((err: Error) => setError(err.message));
+      .then((items: Recommendation[]) => {
+        setRecommendations(items);
+        setError(null);
+      })
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -53,7 +58,11 @@ export default function Home() {
           <span className="pill">Explainable ranking</span>
         </div>
 
-        {error && <div className="error">{error}. Start the Spring Boot API on port 8080.</div>}
+        {loading && <div className="error">Loading current Toronto emergency department data…</div>}
+        {error && <div className="error">{error}. The free API may need about a minute to wake up.</div>}
+        {!loading && !error && recommendations.length === 0 && (
+          <div className="error">Current Toronto wait-time data is temporarily unavailable. Please try again shortly.</div>
+        )}
 
         <div className="cards">
           {recommendations.map((item, index) => (
