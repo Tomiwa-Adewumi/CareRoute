@@ -119,7 +119,7 @@ The same machine-readable card is available from `GET /api/model/card`.
 
 - **Frontend:** Next.js 16 + TypeScript
 - **Backend:** Java 17 + Spring Boot 4.1
-- **Database:** PostgreSQL (Supabase project prepared for durable storage; H2 demo fallback)
+- **Database:** Neon PostgreSQL for durable production history; H2 fallback for local development
 - **Migrations:** Flyway
 - **Persistence:** Spring Data JPA
 - **Live data:** adapter-based ingestion; initial source is ER Compass' public current-wait endpoint
@@ -227,7 +227,7 @@ NEXT_PUBLIC_API_BASE_URL=https://your-api-host.example.com
 
 ## Next milestones
 
-1. Restore or replace the paused Supabase PostgreSQL project for durable observation history.
+1. Accumulate enough durable Neon history to publish the first leakage-safe evaluation results.
 2. Add direct first-party adapters where practical, starting with UHN/Sunnybrook.
 3. Replace approximate travel time with a routing API.
 4. Add source-health, retries/backoff, and stale-feed alerts.
