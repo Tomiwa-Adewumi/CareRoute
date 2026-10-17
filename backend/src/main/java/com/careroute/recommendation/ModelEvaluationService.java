@@ -35,7 +35,9 @@ public class ModelEvaluationService {
         Instant newest = null;
 
         for (var hospital : hospitals.findByActiveTrueAndProvinceOrderByNameAsc("ON")) {
-            List<WaitTimeObservationEntity> series = observations.findByHospital_IdOrderByObservedAtAsc(hospital.getId());
+            List<WaitTimeObservationEntity> series = new ArrayList<>(
+                    observations.findTop1000ByHospital_IdOrderByObservedAtDesc(hospital.getId()));
+            Collections.reverse(series);
             totalObservations += series.size();
             if (series.size() >= 3) hospitalsWithForecast++;
             if (!series.isEmpty() && (newest == null || series.get(series.size() - 1).getObservedAt().isAfter(newest))) {
@@ -75,7 +77,7 @@ public class ModelEvaluationService {
                 metrics(movingAverageErrors),
                 predictions == 0 ? null : round((covered * 100.0) / predictions),
                 MIN_REPORTABLE_PREDICTIONS,
-                "Rolling-origin backtest; each prediction uses only earlier observations");
+                "Rolling-origin backtest over at most 1000 recent observations per hospital; each prediction uses only earlier observations");
     }
 
     private Metrics metrics(List<Double> errors) {

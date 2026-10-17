@@ -26,7 +26,9 @@ class ModelEvaluationServiceTest {
                 observation(hospital, 40, start), observation(hospital, 50, start.plusSeconds(600)),
                 observation(hospital, 60, start.plusSeconds(1200)), observation(hospital, 70, start.plusSeconds(1800)));
         when(hospitals.findByActiveTrueAndProvinceOrderByNameAsc("ON")).thenReturn(List.of(hospital));
-        when(observations.findByHospital_IdOrderByObservedAtAsc("h1")).thenReturn(series);
+        var descending = new java.util.ArrayList<>(series);
+        java.util.Collections.reverse(descending);
+        when(observations.findTop1000ByHospital_IdOrderByObservedAtDesc("h1")).thenReturn(descending);
 
         var result = new ModelEvaluationService(hospitals, observations, new WaitTimeForecastService()).evaluate();
 
@@ -35,6 +37,7 @@ class ModelEvaluationServiceTest {
         assertNotNull(result.linearRegression());
         assertEquals(0.0, result.linearRegression().maeMinutes());
         assertEquals(10.0, result.latestWaitBaseline().maeMinutes());
+        org.mockito.Mockito.verify(observations).findTop1000ByHospital_IdOrderByObservedAtDesc("h1");
     }
 
     private WaitTimeObservationEntity observation(HospitalEntity hospital, int wait, Instant at) {
