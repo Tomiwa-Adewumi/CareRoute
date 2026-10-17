@@ -16,7 +16,7 @@ score = predicted wait-at-arrival minutes + travel minutes + stale-data penalty
 
 CareRoute uses an **explainable per-hospital linear-regression model**. For each hospital, the backend loads up to 20 recent wait-time observations, fits wait minutes against observation time, and projects the wait forward by the visitor's estimated travel time. Predictions are bounded to avoid unstable extrapolation when the history is sparse or volatile. With fewer than three observations, the system explicitly falls back to the current reported wait.
 
-This is classical machine learning, not generative AI. No LLM is currently used, and no model diagnoses symptoms or decides whether someone needs emergency care. The model name, sample count, current wait, predicted wait, travel estimate, and final score are returned by the API and shown in the interface so the recommendation remains auditable.
+The model name, training-window sample count, current wait, predicted wait, travel estimate, prediction interval, and final score are returned by the API and shown in the interface. This makes every recommendation traceable from source observation through forecast to ranking.
 
 ## The math
 
@@ -224,17 +224,3 @@ NEXT_PUBLIC_API_BASE_URL=https://your-api-host.example.com
 - observation deduplication and database uniqueness constraint
 - responsive Next.js dashboard
 - health endpoint and CI
-
-## Next milestones
-
-1. Accumulate enough durable Neon history to publish the first leakage-safe evaluation results.
-2. Add direct first-party adapters where practical, starting with UHN/Sunnybrook.
-3. Replace approximate travel time with a routing API.
-4. Add source-health, retries/backoff, and stale-feed alerts.
-5. Add Redis caching for recommendation reads.
-6. Add hour-of-day, weekday, lag, and traffic features after the baseline has enough history for a fair comparison.
-7. Add observability, rate limiting, and deployment environments.
-
-## Product principle
-
-AI explains evidence; it does not diagnose the patient or determine whether emergency care is medically necessary.
