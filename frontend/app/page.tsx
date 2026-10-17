@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-type Recommendation = { hospital: { id: string; name: string; waitMinutes: number; predictedWaitMinutes: number; forecastSampleCount: number; forecastModel: string; travelMinutes: number; observedAt: string }; score: number; explanation: string };
+type Recommendation = { hospital: { id: string; name: string; waitMinutes: number; predictedWaitMinutes: number; predictionLowerMinutes: number; predictionUpperMinutes: number; forecastSampleCount: number; forecastModel: string; travelMinutes: number; observedAt: string }; score: number; explanation: string };
+type Metrics = { maeMinutes: number; rmseMinutes: number; medianAbsoluteErrorMinutes: number };
+type ModelEvaluation = { status: string; evaluatedPredictions: number; storedObservations: number; hospitalsWithActiveForecast: number; newestObservation: string | null; linearRegression: Metrics | null; latestWaitBaseline: Metrics | null; movingAverageBaseline: Metrics | null; intervalCoveragePercent: number | null; minimumPredictionsForReporting: number; methodology: string };
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://careroute-api-main.onrender.com";
 
 export default function Home() {
@@ -11,6 +13,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [locationStatus, setLocationStatus] = useState("Requesting your location…");
   const [hasLocation, setHasLocation] = useState(false);
+  const [evaluation, setEvaluation] = useState<ModelEvaluation | null>(null);
 
   const loadRecommendations = useCallback((lat?: number, lng?: number) => {
     setLoading(true);
@@ -37,7 +40,13 @@ export default function Home() {
     );
   }, [loadRecommendations]);
 
-  useEffect(() => requestLocation(), [requestLocation]);
+  useEffect(() => {
+    requestLocation();
+    fetch(`${apiBase}/api/model/metrics`)
+      .then((response) => response.ok ? response.json() : null)
+      .then((result: ModelEvaluation | null) => setEvaluation(result))
+      .catch(() => setEvaluation(null));
+  }, [requestLocation]);
 
   return (
     <main>
@@ -99,7 +108,7 @@ export default function Home() {
               <div className="metricGrid">
                 <div><span>{hasLocation ? "Travel from you" : "Travel excluded"}</span><strong>{hasLocation ? item.hospital.travelMinutes : "—"}<small>{hasLocation ? " min" : ""}</small></strong></div>
                 <div><span>Reported wait</span><strong>{item.hospital.waitMinutes}<small> min</small></strong></div>
-                <div className="prediction"><span>Predicted at arrival</span><strong>{item.hospital.predictedWaitMinutes}<small> min</small></strong></div>
+                <div className="prediction"><span>Predicted at arrival</span><strong>{item.hospital.predictedWaitMinutes}<small> min</small></strong><em>{isForecast ? `${item.hospital.predictionLowerMinutes}–${item.hospital.predictionUpperMinutes} min interval` : "current-wait fallback"}</em></div>
                 <div><span>Model evidence</span><strong>{item.hospital.forecastSampleCount}<small> samples</small></strong></div>
               </div>
               <div className="explanationRow"><p><b>Why this rank:</b> {item.explanation}</p><time dateTime={item.hospital.observedAt}>Updated {new Date(item.hospital.observedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time></div>
@@ -117,6 +126,17 @@ export default function Home() {
             <div className="mathStep"><span>3</span><div><strong>Forecast arrival</strong><code>ŷ = ȳ + β₁(x<sub>arrival</sub> − x̄)</code></div></div>
             <div className="mathStep"><span>4</span><div><strong>Apply guardrails</strong><p>Require ≥3 samples; clamp predictions to [0, 720] and within ±60 minutes of the latest wait.</p></div></div>
           </div>
+        </div>
+        <div className="section evidenceSection">
+          <div className="evidenceHeading"><div><div className="eyebrow light">Live model evidence</div><h3>{evaluation?.status === "EVALUATED" ? "Backtest results" : "Building an honest benchmark"}</h3></div><span className={`evaluationState ${evaluation?.status === "EVALUATED" ? "ready" : ""}`}>{evaluation?.status?.replaceAll("_", " ") ?? "LOADING"}</span></div>
+          <p className="evidenceCopy">{evaluation?.methodology ?? "Loading evaluation status…"}. Metrics remain provisional until at least {evaluation?.minimumPredictionsForReporting ?? 10} out-of-sample predictions exist.</p>
+          <div className="evidenceGrid">
+            <div><span>Stored observations</span><strong>{evaluation?.storedObservations ?? "—"}</strong><small>deduplicated records</small></div>
+            <div><span>Evaluated predictions</span><strong>{evaluation?.evaluatedPredictions ?? "—"}</strong><small>no future-data leakage</small></div>
+            <div><span>Regression MAE</span><strong>{evaluation?.linearRegression ? `${evaluation.linearRegression.maeMinutes}m` : "—"}</strong><small>latest-wait baseline {evaluation?.latestWaitBaseline ? `${evaluation.latestWaitBaseline.maeMinutes}m` : "—"}</small></div>
+            <div><span>Interval coverage</span><strong>{evaluation?.intervalCoveragePercent != null ? `${evaluation.intervalCoveragePercent}%` : "—"}</strong><small>residual-based 95% interval</small></div>
+          </div>
+          <p className="honestyNote">No performance claim is shown until the minimum evaluation sample is reached. This prevents a small demo dataset from being presented as model validation.</p>
         </div>
       </section>
 

@@ -48,9 +48,12 @@ public class WaitTimeIngestionService {
                     live.address(), live.latitude(), live.longitude(), true, false, true);
             hospital = hospitals.save(hospital);
 
-            observations.save(new WaitTimeObservationEntity(
-                    hospital, live.waitMinutes(), live.observedAt(), collectedAt, "ER_COMPASS", live.sourceUrl()));
-            saved++;
+            if (!observations.existsByHospital_IdAndObservedAtAndWaitMinutes(
+                    hospital.getId(), live.observedAt(), live.waitMinutes())) {
+                observations.save(new WaitTimeObservationEntity(
+                        hospital, live.waitMinutes(), live.observedAt(), collectedAt, "ER_COMPASS", live.sourceUrl()));
+                saved++;
+            }
         }
         log.info("CareRoute ingestion saved {} Toronto observations from {} available rows", saved, liveWaits.size());
     }

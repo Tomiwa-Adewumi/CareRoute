@@ -69,13 +69,13 @@ Runtime per hospital is `O(n)` time over at most 20 observations and `O(1)` addi
 - The model is per hospital, so one hospital's scale or trend cannot dominate another's fit.
 - Geolocation affects the forecast horizon and travel component; coordinates are not persisted.
 
-The current model does **not** capture hour-of-day, day-of-week, triage acuity, queue length, staffing, traffic routes, uncertainty intervals, or causal effects. It should therefore be described as an interpretable prototype forecast—not a clinically validated predictor.
+The current model does **not** capture hour-of-day, day-of-week, triage acuity, queue length, staffing, traffic routes, calibrated clinical uncertainty, or causal effects. Its residual-based interval communicates model spread but is not a clinically validated confidence interval. This remains an interpretable prototype forecast—not a clinical predictor.
 
-## Evaluation plan
+## Evaluation
 
-The next ML milestone is a rolling-origin backtest on durable observation history. For each timestamp, the model will train only on earlier observations and predict the next reported wait, preventing future-data leakage.
+CareRoute implements a rolling-origin backtest. For each timestamp, the evaluator trains only on earlier observations and predicts the next reported wait, preventing future-data leakage. It compares the regression model with the latest reported wait and a three-observation moving average.
 
-Planned measurements:
+Reported measurements:
 
 | Metric / check | Why it matters |
 | --- | --- |
@@ -87,7 +87,23 @@ Planned measurements:
 | Error by hospital and time of day | Detects uneven performance and temporal bias |
 | Prediction-interval coverage | Quantifies whether displayed uncertainty is calibrated |
 
-No accuracy number is claimed yet because the free demo currently uses an in-memory database that resets on deployment. Reporting a metric without durable held-out history would be misleading.
+The live `/api/model/metrics` endpoint reports stored observations, out-of-sample prediction count, MAE, RMSE, median absolute error, baseline errors, and interval coverage. The UI remains in `COLLECTING_HISTORY` until at least 10 out-of-sample predictions exist. No accuracy number is claimed before that threshold, and the current free demo's in-memory database can reset on deployment.
+
+## Model card
+
+| Field | Value |
+| --- | --- |
+| Model | `LINEAR_REGRESSION_V1` |
+| Type | Per-hospital ordinary least squares regression |
+| Intended use | Estimate wait at arrival to support an explainable ED ranking |
+| Inputs | Recent waits, timestamps, and travel-time forecast horizon |
+| Output | Bounded wait prediction with a residual-based 95% interval |
+| Not intended for | Diagnosis, triage, or clinical decision-making |
+| Minimum history | Three observations; otherwise use the current-wait fallback |
+| Evaluation | Leakage-safe rolling-origin backtest against two baselines |
+| Known gaps | No route traffic, staffing, acuity, calibrated clinical uncertainty, or external validation |
+
+The same machine-readable card is available from `GET /api/model/card`.
 
 ## ML engineering decisions demonstrated
 
@@ -103,7 +119,7 @@ No accuracy number is claimed yet because the free demo currently uses an in-mem
 
 - **Frontend:** Next.js 16 + TypeScript
 - **Backend:** Java 17 + Spring Boot 4.1
-- **Database:** PostgreSQL (Neon recommended for durable free-tier storage)
+- **Database:** PostgreSQL (Supabase project prepared for durable storage; H2 demo fallback)
 - **Migrations:** Flyway
 - **Persistence:** Spring Data JPA
 - **Live data:** adapter-based ingestion; initial source is ER Compass' public current-wait endpoint
@@ -113,27 +129,19 @@ No accuracy number is claimed yet because the free demo currently uses an in-mem
 
 ## Data flow
 
-```text
-public ER feeds / aggregators
-          ↓
-   ingestion adapters
-          ↓
- normalize + validate
-          ↓
-     PostgreSQL
-  ├── hospitals
-  └── wait_time_observations
-          ↓
- latest observation per hospital
-          ↓
- linear-regression forecast
-  at expected arrival time
-          ↓
- recommendation engine
-          ↓
-   Spring Boot REST API
-          ↓
-      Next.js UI
+```mermaid
+flowchart LR
+  Feed[Public ER feed] --> Ingest[Scheduled ingestion<br/>normalize + deduplicate]
+  Ingest --> DB[(PostgreSQL<br/>timestamped observations)]
+  DB --> Forecast[Per-hospital OLS<br/>forecast + interval]
+  DB --> Eval[Rolling-origin<br/>backtest]
+  Location[Browser location<br/>not stored] --> Travel[Travel estimate]
+  Travel --> Forecast
+  Forecast --> Rank[Explainable ranking]
+  Travel --> Rank
+  Rank --> API[Spring Boot API]
+  Eval --> API
+  API --> UI[Next.js UI]
 ```
 
 The backend currently polls Ontario data every 10 minutes and persists Toronto observations. The adapter boundary is intentional: direct hospital-specific sources can be added without changing the persistence or recommendation layers.
@@ -176,6 +184,8 @@ API:
 ```text
 GET /api/recommendations
 GET /api/recommendations?lat=43.6532&lng=-79.3832
+GET /api/model/card
+GET /api/model/metrics
 GET /actuator/health
 ```
 
@@ -199,6 +209,9 @@ NEXT_PUBLIC_API_BASE_URL=https://your-api-host.example.com
 
 - Java/Spring Boot REST backend
 - explainable linear-regression wait forecasting from recent observations
+- residual-based prediction intervals
+- rolling-origin backtesting against latest-wait and moving-average baselines
+- live model-card and evaluation endpoints
 - predicted wait-at-arrival + travel + freshness scoring
 - browser geolocation with a privacy-preserving no-location fallback
 - scheduled live wait-time ingestion
@@ -208,17 +221,18 @@ NEXT_PUBLIC_API_BASE_URL=https://your-api-host.example.com
 - Flyway migrations
 - JPA persistence and latest-observation queries
 - historical wait-time snapshots
+- observation deduplication and database uniqueness constraint
 - responsive Next.js dashboard
 - health endpoint and CI
 
 ## Next milestones
 
-1. Connect a durable Neon PostgreSQL database for long-term observation history.
+1. Restore or replace the paused Supabase PostgreSQL project for durable observation history.
 2. Add direct first-party adapters where practical, starting with UHN/Sunnybrook.
 3. Replace approximate travel time with a routing API.
-4. Add source-health, retries/backoff, deduplication, and stale-feed alerts.
+4. Add source-health, retries/backoff, and stale-feed alerts.
 5. Add Redis caching for recommendation reads.
-6. Evaluate the forecast against held-out observations and add MAE/RMSE model monitoring.
+6. Add hour-of-day, weekday, lag, and traffic features after the baseline has enough history for a fair comparison.
 7. Add observability, rate limiting, and deployment environments.
 
 ## Product principle

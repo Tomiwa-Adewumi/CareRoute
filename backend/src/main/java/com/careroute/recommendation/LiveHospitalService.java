@@ -35,6 +35,8 @@ public class LiveHospitalService {
                         hospital.getName(),
                         observation.getWaitMinutes(),
                         forecast.predictedWaitMinutes(),
+                        forecast.predictionLowerMinutes(),
+                        forecast.predictionUpperMinutes(),
                         forecast.sampleCount(),
                         forecast.model(),
                         travelMinutes,

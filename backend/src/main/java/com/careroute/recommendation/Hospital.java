@@ -7,6 +7,8 @@ public record Hospital(
         String name,
         int waitMinutes,
         int predictedWaitMinutes,
+        int predictionLowerMinutes,
+        int predictionUpperMinutes,
         int forecastSampleCount,
         String forecastModel,
         int travelMinutes,
