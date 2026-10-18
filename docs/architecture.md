@@ -36,23 +36,6 @@ flowchart LR
 
 Every target is evaluated using only earlier observations. OLS is compared on identical targets with the latest observed wait, a three-observation moving average, and simple exponential smoothing with `alpha = 0.5`. The API reports MAE, RMSE, median absolute error, and interval coverage. Metrics remain provisional until ten out-of-sample predictions exist.
 
-## Failure modes
-
-| Failure | Behaviour |
-| --- | --- |
-| Live feed unavailable | Existing observations remain queryable; ingestion health becomes `DEGRADED` |
-| Route provider unavailable | Use the documented distance-based fallback |
-| Fewer than three observations | Use the current-wait forecast fallback |
-| Repeated timestamp/value | Database uniqueness constraint prevents duplication |
-| Render restart | Neon preserves observations and Flyway validates the schema |
-| Stale wait data | Add an explicit, capped ranking penalty and expose data age |
-
-## Scaling path
-
-- Move routing cache to managed Key Value when multiple API instances are needed.
-- Run ingestion in a dedicated worker to separate feed reliability from request serving.
-- Materialize evaluation summaries when the observation history becomes large.
-- Partition observations by time if retention grows beyond the needs of a single indexed table.
 
 ## Privacy and security
 
