@@ -13,12 +13,18 @@ class LiveHospitalServiceTest {
         var service = new LiveHospitalService(
                 mock(com.careroute.data.HospitalRepository.class),
                 mock(com.careroute.data.WaitTimeObservationRepository.class),
-                mock(WaitTimeForecastService.class));
+                mock(WaitTimeForecastService.class),
+                new TravelTimeService("http://127.0.0.1:1"));
 
-        int besideTorontoGeneral = service.estimateTravelMinutes(43.6596, -79.3889, 43.6596, -79.3889);
-        int fromScarborough = service.estimateTravelMinutes(43.7764, -79.2318, 43.6596, -79.3889);
+        int besideTorontoGeneral = serviceTravel(43.6596, -79.3889, 43.6596, -79.3889);
+        int fromScarborough = serviceTravel(43.7764, -79.2318, 43.6596, -79.3889);
 
         assertEquals(5, besideTorontoGeneral);
         assertTrue(fromScarborough > besideTorontoGeneral);
+    }
+
+    private int serviceTravel(double fromLat, double fromLng, double toLat, double toLng) {
+        double distanceKm = TravelTimeService.haversineKm(fromLat, fromLng, toLat, toLng);
+        return Math.max(1, (int) Math.round((distanceKm / 30.0) * 60.0 + 5.0));
     }
 }

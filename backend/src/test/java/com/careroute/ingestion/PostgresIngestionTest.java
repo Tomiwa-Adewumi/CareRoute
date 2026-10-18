@@ -52,6 +52,6 @@ class PostgresIngestionTest {
     }
     private ErCompassClient.LiveWait row(Instant at, int wait) {
         return new ErCompassClient.LiveWait("test-hospital", "Test Hospital", "Toronto", "ON", null,
-                43.65, -79.38, wait, at, "https://example.com/fixture");
+                43.65, -79.38, wait, at, List.of(), "https://example.com/fixture");
     }
 }

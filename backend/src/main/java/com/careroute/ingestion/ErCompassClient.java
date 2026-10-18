@@ -52,7 +52,8 @@ public class ErCompassClient {
 
             waits.add(new LiveWait(
                     id, name, city, text(row, "province"), text(row, "address"), latitude, longitude,
-                    waitMinutes, instant(row, "observed_at", "as_of", "fetched_at", "updated_at", "last_updated", "timestamp"), endpoint));
+                    waitMinutes, instant(row, "observed_at", "as_of", "fetched_at", "updated_at", "last_updated", "timestamp"),
+                    integerList(row, "spark"), endpoint));
         }
         return waits;
     }
@@ -102,9 +103,22 @@ public class ErCompassClient {
     }
 
     private Instant instant(JsonNode row, String... keys) {
-        String raw = text(row, keys);
-        if (raw == null) return Instant.now();
-        try { return Instant.parse(raw); } catch (Exception ignored) { return Instant.now(); }
+        for (String key : keys) {
+            String raw = text(row, key);
+            if (raw == null) continue;
+            try { return Instant.parse(raw); } catch (Exception ignored) {}
+        }
+        return Instant.now();
+    }
+
+    private List<Integer> integerList(JsonNode row, String key) {
+        JsonNode values = row.get(key);
+        if (values == null || !values.isArray()) return List.of();
+        List<Integer> result = new ArrayList<>();
+        for (JsonNode value : values) {
+            if (value.isNumber() && value.asDouble() >= 0) result.add((int) Math.round(value.asDouble()));
+        }
+        return List.copyOf(result);
     }
 
     private String slug(String value) {
@@ -114,5 +128,5 @@ public class ErCompassClient {
 
     public record LiveWait(String id, String name, String city, String province, String address,
                            Double latitude, Double longitude, int waitMinutes, Instant observedAt,
-                           String sourceUrl) {}
+                           List<Integer> recentWaits, String sourceUrl) {}
 }

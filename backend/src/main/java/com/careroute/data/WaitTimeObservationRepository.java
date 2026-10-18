@@ -7,7 +7,9 @@ import java.util.UUID;
 
 public interface WaitTimeObservationRepository extends JpaRepository<WaitTimeObservationEntity, UUID> {
     Optional<WaitTimeObservationEntity> findTopByHospital_IdOrderByObservedAtDesc(String hospitalId);
+    Optional<WaitTimeObservationEntity> findTopByOrderByObservedAtDesc();
     List<WaitTimeObservationEntity> findTop20ByHospital_IdOrderByObservedAtDesc(String hospitalId);
     List<WaitTimeObservationEntity> findTop1000ByHospital_IdOrderByObservedAtDesc(String hospitalId);
     boolean existsByHospital_IdAndObservedAtAndWaitMinutes(String hospitalId, java.time.Instant observedAt, int waitMinutes);
+    boolean existsByHospital_IdAndSource(String hospitalId, String source);
 }

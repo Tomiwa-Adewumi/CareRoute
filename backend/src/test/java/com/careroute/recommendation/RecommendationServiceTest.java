@@ -14,8 +14,8 @@ class RecommendationServiceTest {
     @Test
     void ranksLowerExpectedTimeToCareFirst() {
         Instant now = Instant.now();
-        Hospital faster = new Hospital("a", "Faster", 60, 60, 50, 70, 4, "LINEAR_REGRESSION_V1", 10, now, true, false);
-        Hospital slower = new Hospital("b", "Slower", 80, 80, 70, 90, 4, "LINEAR_REGRESSION_V1", 15, now, true, false);
+        Hospital faster = hospital("a", "Faster", 60, 10, now);
+        Hospital slower = hospital("b", "Slower", 80, 15, now);
 
         var ranked = service.rank(List.of(slower, faster));
 
@@ -25,12 +25,18 @@ class RecommendationServiceTest {
     @Test
     void staleDataReceivesPenalty() {
         Instant now = Instant.now();
-        Hospital fresh = new Hospital("fresh", "Fresh", 60, 60, 50, 70, 4, "LINEAR_REGRESSION_V1", 10, now, true, false);
-        Hospital stale = new Hospital("stale", "Stale", 60, 60, 50, 70, 4, "LINEAR_REGRESSION_V1", 10, now.minusSeconds(60 * 60), true, false);
+        Hospital fresh = hospital("fresh", "Fresh", 60, 10, now);
+        Hospital stale = hospital("stale", "Stale", 60, 10, now.minusSeconds(60 * 60));
 
         var ranked = service.rank(List.of(stale, fresh));
 
         assertThat(ranked.get(0).hospital().id()).isEqualTo("fresh");
         assertThat(ranked.get(1).score()).isGreaterThan(ranked.get(0).score());
+    }
+
+    private Hospital hospital(String id, String name, int wait, int travel, Instant observedAt) {
+        return new Hospital(id, name, wait, wait, wait - 10, wait + 10, 4,
+                "LINEAR_REGRESSION_V1", travel, 5.0, "TEST", 43.65, -79.38,
+                observedAt, true, false);
     }
 }

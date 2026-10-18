@@ -12,6 +12,10 @@ public record Hospital(
         int forecastSampleCount,
         String forecastModel,
         int travelMinutes,
+        double travelDistanceKm,
+        String travelSource,
+        Double latitude,
+        Double longitude,
         Instant observedAt,
         boolean adultEmergency,
         boolean pediatricEmergency) {

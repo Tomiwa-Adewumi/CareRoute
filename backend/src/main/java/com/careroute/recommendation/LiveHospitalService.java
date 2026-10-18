@@ -13,23 +13,25 @@ public class LiveHospitalService {
     private final HospitalRepository hospitals;
     private final WaitTimeObservationRepository observations;
     private final WaitTimeForecastService forecastService;
+    private final TravelTimeService travelTimeService;
 
     public LiveHospitalService(HospitalRepository hospitals, WaitTimeObservationRepository observations,
-                               WaitTimeForecastService forecastService) {
+                               WaitTimeForecastService forecastService, TravelTimeService travelTimeService) {
         this.hospitals = hospitals;
         this.observations = observations;
         this.forecastService = forecastService;
+        this.travelTimeService = travelTimeService;
     }
 
     public List<Hospital> latest(double userLat, double userLng, boolean hasLocation) {
         List<Hospital> result = new ArrayList<>();
         for (HospitalEntity hospital : hospitals.findByActiveTrueAndProvinceOrderByNameAsc("ON")) {
             observations.findTopByHospital_IdOrderByObservedAtDesc(hospital.getId()).ifPresent(observation -> {
-                int travelMinutes = hasLocation
-                        ? estimateTravelMinutes(userLat, userLng, hospital.getLatitude(), hospital.getLongitude())
-                        : 0;
+                var travel = hasLocation
+                        ? travelTimeService.estimate(userLat, userLng, hospital.getLatitude(), hospital.getLongitude())
+                        : new TravelTimeService.TravelEstimate(0, 0, "LOCATION_NOT_PROVIDED");
                 var forecast = forecastService.predict(
-                        observations.findTop20ByHospital_IdOrderByObservedAtDesc(hospital.getId()), travelMinutes);
+                        observations.findTop20ByHospital_IdOrderByObservedAtDesc(hospital.getId()), travel.minutes());
                 result.add(new Hospital(
                         hospital.getId(),
                         hospital.getName(),
@@ -39,7 +41,11 @@ public class LiveHospitalService {
                         forecast.predictionUpperMinutes(),
                         forecast.sampleCount(),
                         forecast.model(),
-                        travelMinutes,
+                        travel.minutes(),
+                        travel.distanceKm(),
+                        travel.source(),
+                        hospital.getLatitude(),
+                        hospital.getLongitude(),
                         observation.getObservedAt(),
                         hospital.isEmergencyDepartment(),
                         hospital.isPediatricEmergency()));
@@ -48,15 +54,4 @@ public class LiveHospitalService {
         return result;
     }
 
-    int estimateTravelMinutes(double userLat, double userLng, Double hospitalLat, Double hospitalLng) {
-        if (hospitalLat == null || hospitalLng == null) return 0;
-        double earthKm = 6371.0;
-        double latDistance = Math.toRadians(hospitalLat - userLat);
-        double lngDistance = Math.toRadians(hospitalLng - userLng);
-        double a = Math.sin(latDistance / 2) * Math.sin(latDistance / 2)
-                + Math.cos(Math.toRadians(userLat)) * Math.cos(Math.toRadians(hospitalLat))
-                * Math.sin(lngDistance / 2) * Math.sin(lngDistance / 2);
-        double distanceKm = earthKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return Math.max(1, (int) Math.round((distanceKm / 30.0) * 60.0 + 5.0));
-    }
 }

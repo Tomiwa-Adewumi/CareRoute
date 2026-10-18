@@ -14,7 +14,7 @@ score = predicted wait-at-arrival minutes + travel minutes + stale-data penalty
 
 ## Where ML/AI is used
 
-CareRoute uses an **explainable per-hospital linear-regression model**. For each hospital, the backend loads up to 20 recent wait-time observations, fits wait minutes against observation time, and projects the wait forward by the visitor's estimated travel time. Predictions are bounded to avoid unstable extrapolation when the history is sparse or volatile. With fewer than three observations, the system explicitly falls back to the current reported wait.
+CareRoute uses an **explainable per-hospital linear-regression model**. For each hospital, the backend loads up to 20 recent wait-time observations, fits wait minutes against observation time, and projects the wait forward by the visitor's routed travel time. Predictions are bounded to avoid unstable extrapolation when the history is sparse or volatile. With fewer than three observations, the system explicitly falls back to the current reported wait.
 
 The model name, training-window sample count, current wait, predicted wait, travel estimate, prediction interval, and final score are returned by the API and shown in the interface. This makes every recommendation traceable from source observation through forecast to ranking.
 
@@ -48,7 +48,7 @@ cd backend
 mvn verify
 ```
 
-Unit tests run without external services. To also run PostgreSQL migration and repeated-ingestion integration tests, set `TEST_DATABASE_URL`, `TEST_DATABASE_USERNAME`, and `TEST_DATABASE_PASSWORD` to a **disposable test database**. CI supplies PostgreSQL 17 and runs these tests on every change.
+Unit tests run without external services. PostgreSQL migration and repeated-ingestion integration tests use a disposable PostgreSQL 17 database in CI. The live evaluator compares OLS with latest-wait, moving-average, and exponential-smoothing forecasts on identical rolling-origin targets.
 
 ## Stack
 
@@ -70,7 +70,7 @@ flowchart LR
   Ingest --> DB[(PostgreSQL<br/>timestamped observations)]
   DB --> Forecast[Per-hospital OLS<br/>forecast + interval]
   DB --> Eval[Rolling-origin<br/>backtest]
-  Location[Browser location<br/>not stored] --> Travel[Travel estimate]
+  Location[Browser location<br/>not stored] --> Travel[OSRM road route<br/>cached + fallback]
   Travel --> Forecast
   Forecast --> Rank[Explainable ranking]
   Travel --> Rank
@@ -124,7 +124,7 @@ GET /api/model/metrics
 GET /actuator/health
 ```
 
-The frontend requests browser geolocation on load and passes latitude/longitude to the API. The MVP estimates travel time using straight-line distance plus a conservative city-speed assumption. Location is used for the request and is not stored. A routing provider is a later milestone.
+The frontend requests browser geolocation on load and passes latitude/longitude to the API. The backend requests road duration from OSRM, caches it for five minutes, and uses a deterministic distance estimate if routing is unavailable. Location is used for the request and is not stored.
 
 ## Frontend
 
@@ -146,9 +146,13 @@ NEXT_PUBLIC_API_BASE_URL=https://your-api-host.example.com
 - explainable linear-regression wait forecasting from recent observations
 - residual-based prediction intervals
 - rolling-origin backtesting against latest-wait and moving-average baselines
+- exponential-smoothing challenger evaluated on identical targets
+- one-time idempotent backfill from the feed's real recent-history sparkline
 - live model-card and evaluation endpoints
 - predicted wait-at-arrival + travel + freshness scoring
 - browser geolocation with a privacy-preserving no-location fallback
+- cached road-route travel duration with a resilient distance fallback
+- ingestion-health endpoint and data-freshness monitoring
 - scheduled live wait-time ingestion
 - resilient JSON normalization for external feed fields
 - Toronto filtering
@@ -159,3 +163,6 @@ NEXT_PUBLIC_API_BASE_URL=https://your-api-host.example.com
 - observation deduplication and database uniqueness constraint
 - responsive Next.js dashboard
 - health endpoint and CI
+- PostgreSQL/Testcontainers migration integration test
+
+Detailed design and failure-mode documentation: [`docs/architecture.md`](docs/architecture.md).

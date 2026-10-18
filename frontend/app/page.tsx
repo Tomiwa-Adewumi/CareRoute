@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-type Recommendation = { hospital: { id: string; name: string; waitMinutes: number; predictedWaitMinutes: number; predictionLowerMinutes: number; predictionUpperMinutes: number; forecastSampleCount: number; forecastModel: string; travelMinutes: number; observedAt: string }; score: number; explanation: string };
+type Recommendation = { hospital: { id: string; name: string; waitMinutes: number; predictedWaitMinutes: number; predictionLowerMinutes: number; predictionUpperMinutes: number; forecastSampleCount: number; forecastModel: string; travelMinutes: number; travelDistanceKm: number; travelSource: string; latitude: number | null; longitude: number | null; observedAt: string }; score: number; scoreBreakdown: { predictedWaitMinutes: number; travelMinutes: number; freshnessPenaltyMinutes: number }; explanation: string };
 type Metrics = { maeMinutes: number; rmseMinutes: number; medianAbsoluteErrorMinutes: number };
-type ModelEvaluation = { status: string; evaluatedPredictions: number; storedObservations: number; hospitalsWithActiveForecast: number; newestObservation: string | null; linearRegression: Metrics | null; latestWaitBaseline: Metrics | null; movingAverageBaseline: Metrics | null; intervalCoveragePercent: number | null; minimumPredictionsForReporting: number; methodology: string };
+type ModelEvaluation = { status: string; evaluatedPredictions: number; storedObservations: number; hospitalsWithActiveForecast: number; newestObservation: string | null; linearRegression: Metrics | null; latestWaitBaseline: Metrics | null; movingAverageBaseline: Metrics | null; exponentialSmoothing: Metrics | null; intervalCoveragePercent: number | null; minimumPredictionsForReporting: number; methodology: string };
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "https://careroute-api-main.onrender.com";
 
 export default function Home() {
@@ -13,6 +13,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [locationStatus, setLocationStatus] = useState("Requesting your location…");
   const [hasLocation, setHasLocation] = useState(false);
+  const [userLocation, setUserLocation] = useState<{lat:number;lng:number} | null>(null);
   const [evaluation, setEvaluation] = useState<ModelEvaluation | null>(null);
 
   const loadRecommendations = useCallback((lat?: number, lng?: number) => {
@@ -34,8 +35,8 @@ export default function Home() {
     }
     setLocationStatus("Requesting your location…");
     navigator.geolocation.getCurrentPosition(
-      ({ coords }) => { setHasLocation(true); setLocationStatus("Location enabled · used only for this request"); void loadRecommendations(coords.latitude, coords.longitude); },
-      () => { setHasLocation(false); setLocationStatus("Location not shared · showing non-personalized estimates"); void loadRecommendations(); },
+      ({ coords }) => { setHasLocation(true); setUserLocation({lat:coords.latitude,lng:coords.longitude}); setLocationStatus("Location enabled · used only for this request"); void loadRecommendations(coords.latitude, coords.longitude); },
+      () => { setHasLocation(false); setUserLocation(null); setLocationStatus("Location not shared · showing non-personalized estimates"); void loadRecommendations(); },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
     );
   }, [loadRecommendations]);
@@ -96,6 +97,13 @@ export default function Home() {
         {error && <div className="notice errorNotice">{error}. The free API may need about a minute to wake up.</div>}
         {!loading && !error && recommendations.length === 0 && <div className="notice errorNotice">Current Toronto wait-time data is temporarily unavailable. Please try again shortly.</div>}
 
+        {recommendations.length > 0 && <div className="routeMap" aria-label="Relative Toronto hospital map">
+          <div className="mapGrid" />
+          <div className="mapLabel"><strong>Relative route view</strong><span>{hasLocation ? "Live road durations included" : "Enable location for routed travel"}</span></div>
+          {userLocation && <span className="mapPoint userPoint" style={mapPosition(userLocation.lat,userLocation.lng)} title="Your approximate position">You</span>}
+          {recommendations.filter(item=>item.hospital.latitude != null && item.hospital.longitude != null).map((item,index)=><span className={`mapPoint hospitalPoint rank${index+1}`} style={mapPosition(item.hospital.latitude!,item.hospital.longitude!)} title={item.hospital.name} key={item.hospital.id}>{index+1}</span>)}
+        </div>}
+
         <div className="cards">
           {recommendations.map((item, index) => {
             const isForecast = item.hospital.forecastModel === "LINEAR_REGRESSION_V1";
@@ -106,11 +114,12 @@ export default function Home() {
                 <div className="scoreBlock"><strong>{Math.round(item.score)}</strong><span>total score</span></div>
               </div>
               <div className="metricGrid">
-                <div><span>{hasLocation ? "Travel from you" : "Travel excluded"}</span><strong>{hasLocation ? item.hospital.travelMinutes : "—"}<small>{hasLocation ? " min" : ""}</small></strong></div>
+                <div><span>{hasLocation ? "Routed travel" : "Travel excluded"}</span><strong>{hasLocation ? item.hospital.travelMinutes : "—"}<small>{hasLocation ? " min" : ""}</small></strong><em>{hasLocation ? `${item.hospital.travelDistanceKm} km · ${item.hospital.travelSource === "OSRM_ROUTE" ? "road route" : "distance fallback"}` : "enable location"}</em></div>
                 <div><span>Reported wait</span><strong>{item.hospital.waitMinutes}<small> min</small></strong></div>
                 <div className="prediction"><span>Predicted at arrival</span><strong>{item.hospital.predictedWaitMinutes}<small> min</small></strong><em>{isForecast ? `${item.hospital.predictionLowerMinutes}–${item.hospital.predictionUpperMinutes} min interval` : "current-wait fallback"}</em></div>
                 <div><span>Model evidence</span><strong>{item.hospital.forecastSampleCount}<small> samples</small></strong></div>
               </div>
+              <div className="scoreFormula"><span>{item.scoreBreakdown.predictedWaitMinutes}m forecast</span><b>+</b><span>{item.scoreBreakdown.travelMinutes}m travel</span><b>+</b><span>{item.scoreBreakdown.freshnessPenaltyMinutes}m freshness</span><b>=</b><strong>{Math.round(item.score)} score</strong></div>
               <div className="explanationRow"><p><b>Why this rank:</b> {item.explanation}</p><time dateTime={item.hospital.observedAt}>Updated {new Date(item.hospital.observedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time></div>
             </article>;
           })}
@@ -119,7 +128,7 @@ export default function Home() {
 
       <section className="modelSection" id="model">
         <div className="section modelLayout">
-          <div className="modelIntro"><div className="eyebrow light">Under the hood</div><h2>Small model.<br />Clear reasoning.</h2><p>CareRoute uses ordinary least squares—not an LLM—to learn a local trend for each hospital. The design favors interpretability, safe fallbacks, and measurable behavior.</p><a href="https://github.com/Tomiwa-Adewumi/CareRoute#the-math" target="_blank" rel="noreferrer">Read the model documentation ↗</a></div>
+          <div className="modelIntro"><div className="eyebrow light">Under the hood</div><h2>Small model.<br />Clear reasoning.</h2><p>CareRoute fits an ordinary-least-squares trend for each hospital and evaluates it against exponential smoothing and two simple baselines. The design favors interpretability, safe fallbacks, and measurable behavior.</p><a href="https://github.com/Tomiwa-Adewumi/CareRoute#the-math" target="_blank" rel="noreferrer">Read the model documentation ↗</a></div>
           <div className="mathPanel">
             <div className="mathStep"><span>1</span><div><strong>Represent the history</strong><p>x = minutes since the oldest observation<br />y = reported wait in minutes</p></div></div>
             <div className="mathStep"><span>2</span><div><strong>Fit the trend</strong><code>β₁ = Σ(xᵢ−x̄)(yᵢ−ȳ) / Σ(xᵢ−x̄)²</code></div></div>
@@ -134,6 +143,7 @@ export default function Home() {
             <div><span>Stored observations</span><strong>{evaluation?.storedObservations ?? "—"}</strong><small>deduplicated records</small></div>
             <div><span>Evaluated predictions</span><strong>{evaluation?.evaluatedPredictions ?? "—"}</strong><small>no future-data leakage</small></div>
             <div><span>Regression MAE</span><strong>{evaluation?.linearRegression ? `${evaluation.linearRegression.maeMinutes}m` : "—"}</strong><small>latest-wait baseline {evaluation?.latestWaitBaseline ? `${evaluation.latestWaitBaseline.maeMinutes}m` : "—"}</small></div>
+            <div><span>Smoothing MAE</span><strong>{evaluation?.exponentialSmoothing ? `${evaluation.exponentialSmoothing.maeMinutes}m` : "—"}</strong><small>alpha 0.5 challenger · moving average {evaluation?.movingAverageBaseline ? `${evaluation.movingAverageBaseline.maeMinutes}m` : "—"}</small></div>
             <div><span>Interval coverage</span><strong>{evaluation?.intervalCoveragePercent != null ? `${evaluation.intervalCoveragePercent}%` : "—"}</strong><small>residual-based 95% interval</small></div>
           </div>
           <p className="honestyNote">No performance claim is shown until the minimum evaluation sample is reached. This prevents a small demo dataset from being presented as model validation.</p>
@@ -143,4 +153,10 @@ export default function Home() {
       <footer><div><strong>CareRoute</strong><span>Explainable ML for a real public-service decision.</span></div><p>Prototype only · Not medical advice · Toronto, Ontario</p></footer>
     </main>
   );
+}
+
+function mapPosition(lat:number,lng:number) {
+  const left = Math.max(4,Math.min(96,((lng + 79.62) / 0.38) * 100));
+  const top = Math.max(8,Math.min(92,((43.82 - lat) / 0.30) * 100));
+  return {left:`${left}%`,top:`${top}%`};
 }

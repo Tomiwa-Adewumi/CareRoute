@@ -27,6 +27,7 @@ public class ModelController {
                 "name", "Per-hospital wait-at-arrival forecaster",
                 "version", "LINEAR_REGRESSION_V1",
                 "type", "Ordinary least squares regression",
+                "comparisonModel", "EXPONENTIAL_SMOOTHING_V1 (alpha=0.5)",
                 "intendedUse", "Rank Toronto emergency departments by estimated total time to care",
                 "notIntendedFor", List.of("diagnosis", "triage", "clinical decision-making"),
                 "features", List.of("observation timestamp", "recent reported waits", "travel-time forecast horizon"),

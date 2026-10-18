@@ -27,8 +27,11 @@ public class RecommendationService {
                 hospital.predictedWaitMinutes(),
                 freshnessPenalty > 0 ? " + stale-data penalty" : "");
 
-        return new Recommendation(hospital, Math.round(score * 10.0) / 10.0, explanation);
+        return new Recommendation(hospital, Math.round(score * 10.0) / 10.0,
+                new ScoreBreakdown(hospital.predictedWaitMinutes(), hospital.travelMinutes(),
+                        Math.round(freshnessPenalty * 10.0) / 10.0), explanation);
     }
 
-    public record Recommendation(Hospital hospital, double score, String explanation) {}
+    public record ScoreBreakdown(int predictedWaitMinutes, int travelMinutes, double freshnessPenaltyMinutes) {}
+    public record Recommendation(Hospital hospital, double score, ScoreBreakdown scoreBreakdown, String explanation) {}
 }

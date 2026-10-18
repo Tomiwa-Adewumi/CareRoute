@@ -30,7 +30,8 @@ class ModelEvaluationServiceTest {
         java.util.Collections.reverse(descending);
         when(observations.findTop1000ByHospital_IdOrderByObservedAtDesc("h1")).thenReturn(descending);
 
-        var result = new ModelEvaluationService(hospitals, observations, new WaitTimeForecastService()).evaluate();
+        var result = new ModelEvaluationService(hospitals, observations, new WaitTimeForecastService(),
+                new ExponentialSmoothingForecastService()).evaluate();
 
         assertEquals("COLLECTING_HISTORY", result.status());
         assertEquals(1, result.evaluatedPredictions());
@@ -38,6 +39,7 @@ class ModelEvaluationServiceTest {
         assertEquals(0.0, result.linearRegression().maeMinutes());
         assertEquals(10.0, result.latestWaitBaseline().maeMinutes());
         org.mockito.Mockito.verify(observations).findTop1000ByHospital_IdOrderByObservedAtDesc("h1");
+        assertEquals(17.0, result.exponentialSmoothing().maeMinutes());
     }
 
     private WaitTimeObservationEntity observation(HospitalEntity hospital, int wait, Instant at) {

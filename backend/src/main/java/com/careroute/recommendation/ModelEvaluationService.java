@@ -17,18 +17,22 @@ public class ModelEvaluationService {
     private final HospitalRepository hospitals;
     private final WaitTimeObservationRepository observations;
     private final WaitTimeForecastService forecasts;
+    private final ExponentialSmoothingForecastService smoothingForecasts;
 
     public ModelEvaluationService(HospitalRepository hospitals, WaitTimeObservationRepository observations,
-                                  WaitTimeForecastService forecasts) {
+                                  WaitTimeForecastService forecasts,
+                                  ExponentialSmoothingForecastService smoothingForecasts) {
         this.hospitals = hospitals;
         this.observations = observations;
         this.forecasts = forecasts;
+        this.smoothingForecasts = smoothingForecasts;
     }
 
     public Evaluation evaluate() {
         List<Double> regressionErrors = new ArrayList<>();
         List<Double> naiveErrors = new ArrayList<>();
         List<Double> movingAverageErrors = new ArrayList<>();
+        List<Double> exponentialSmoothingErrors = new ArrayList<>();
         int covered = 0;
         int totalObservations = 0;
         int hospitalsWithForecast = 0;
@@ -61,6 +65,8 @@ public class ModelEvaluationService {
                 double movingAverage = history.stream().limit(3)
                         .mapToInt(WaitTimeObservationEntity::getWaitMinutes).average().orElse(actual);
                 movingAverageErrors.add(Math.abs(actual - movingAverage));
+                var smoothing = smoothingForecasts.predict(history);
+                exponentialSmoothingErrors.add((double) Math.abs(actual - smoothing.predictedWaitMinutes()));
                 if (actual >= forecast.predictionLowerMinutes() && actual <= forecast.predictionUpperMinutes()) covered++;
             }
         }
@@ -75,6 +81,7 @@ public class ModelEvaluationService {
                 metrics(regressionErrors),
                 metrics(naiveErrors),
                 metrics(movingAverageErrors),
+                metrics(exponentialSmoothingErrors),
                 predictions == 0 ? null : round((covered * 100.0) / predictions),
                 MIN_REPORTABLE_PREDICTIONS,
                 "Rolling-origin backtest over at most 1000 recent observations per hospital; each prediction uses only earlier observations");
@@ -98,6 +105,7 @@ public class ModelEvaluationService {
     public record Evaluation(String status, int evaluatedPredictions, int storedObservations,
                              int hospitalsWithActiveForecast, Instant newestObservation,
                              Metrics linearRegression, Metrics latestWaitBaseline,
-                             Metrics movingAverageBaseline, Double intervalCoveragePercent,
+                             Metrics movingAverageBaseline, Metrics exponentialSmoothing,
+                             Double intervalCoveragePercent,
                              int minimumPredictionsForReporting, String methodology) {}
 }
