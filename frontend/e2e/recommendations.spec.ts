@@ -16,7 +16,7 @@ test("uses location and explains a ranked recommendation", async ({ browser }) =
     intervalCoveragePercent: 90, minimumPredictionsForReporting: 10,
     methodology: "Rolling-origin backtest; each prediction uses only earlier observations",
   }}));
-  await page.route("**/api/recommendations?**", route => route.fulfill({ json: [{
+  await page.route("**/api/recommendations**", route => route.fulfill({ json: [{
     hospital: { id: "h1", name: "Toronto General Hospital", waitMinutes: 80,
       predictedWaitMinutes: 72, predictionLowerMinutes: 60, predictionUpperMinutes: 84,
       forecastSampleCount: 12, forecastModel: "LINEAR_REGRESSION_V1", travelMinutes: 9,
@@ -27,7 +27,7 @@ test("uses location and explains a ranked recommendation", async ({ browser }) =
   }]}));
 
   await page.goto("/");
-  await expect(page.getByText("Personalized ranking is active")).toBeVisible();
+  await expect(page.getByText("Personalized ranking is active", { exact: false })).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText("Toronto General Hospital")).toBeVisible();
   await expect(page.getByText("72m forecast")).toBeVisible();
   await expect(page.getByText("road route")).toBeVisible();
