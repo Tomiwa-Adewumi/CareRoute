@@ -38,7 +38,6 @@ Every target is evaluated using only earlier observations. OLS is compared on id
 
 
 ## Privacy and security
-
 - User coordinates are not persisted.
-- Database credentials live in Render secrets.
-- Production schema changes are versioned as Flyway migrations.
+
+
