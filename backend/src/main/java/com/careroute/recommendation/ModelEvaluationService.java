@@ -40,7 +40,11 @@ public class ModelEvaluationService {
 
         for (var hospital : hospitals.findByActiveTrueAndProvinceOrderByNameAsc("ON")) {
             List<WaitTimeObservationEntity> series = new ArrayList<>(
-                    observations.findTop1000ByHospital_IdOrderByObservedAtDesc(hospital.getId()));
+                    observations.findTop1000ByHospital_IdAndSourceOrderByObservedAtDesc(hospital.getId(), "ER_COMPASS_OBSERVED"));
+            // Conflicting revisions at the same event time are not independent targets.
+            var counts = series.stream().collect(java.util.stream.Collectors.groupingBy(
+                    WaitTimeObservationEntity::getObservedAt, java.util.stream.Collectors.counting()));
+            series.removeIf(row -> counts.get(row.getObservedAt()) > 1);
             Collections.reverse(series);
             totalObservations += series.size();
             if (series.size() >= 3) hospitalsWithForecast++;
@@ -52,11 +56,16 @@ public class ModelEvaluationService {
             for (int targetIndex = 3; targetIndex < series.size(); targetIndex++) {
                 int start = Math.max(0, targetIndex - 20);
                 List<WaitTimeObservationEntity> history = new ArrayList<>(series.subList(start, targetIndex));
-                Collections.reverse(history);
                 var target = series.get(targetIndex);
-                int horizon = Math.max(0, (int) Duration.between(
-                        history.get(0).getObservedAt(), target.getObservedAt()).toMinutes());
-                var forecast = forecasts.predict(history, horizon);
+                history.removeIf(row -> !row.getObservedAt().isBefore(target.getObservedAt())
+                        || row.getCollectedAt().isAfter(target.getObservedAt()));
+                if (history.size() < 3) continue;
+                Collections.reverse(history);
+                Instant issueTime = history.stream().map(WaitTimeObservationEntity::getCollectedAt)
+                        .max(Instant::compareTo).orElseThrow();
+                int horizon = Math.max(0, (int) Duration.between(issueTime, target.getObservedAt()).toMinutes());
+                if (horizon < 5 || horizon > 60) continue;
+                var forecast = forecasts.predictAt(history, target.getObservedAt());
                 if (!"LINEAR_REGRESSION_V1".equals(forecast.model())) continue;
 
                 int actual = target.getWaitMinutes();
@@ -78,13 +87,13 @@ public class ModelEvaluationService {
                 totalObservations,
                 hospitalsWithForecast,
                 newest,
-                metrics(regressionErrors),
-                metrics(naiveErrors),
-                metrics(movingAverageErrors),
-                metrics(exponentialSmoothingErrors),
-                predictions == 0 ? null : round((covered * 100.0) / predictions),
+                predictions < MIN_REPORTABLE_PREDICTIONS ? null : metrics(regressionErrors),
+                predictions < MIN_REPORTABLE_PREDICTIONS ? null : metrics(naiveErrors),
+                predictions < MIN_REPORTABLE_PREDICTIONS ? null : metrics(movingAverageErrors),
+                predictions < MIN_REPORTABLE_PREDICTIONS ? null : metrics(exponentialSmoothingErrors),
+                predictions < MIN_REPORTABLE_PREDICTIONS ? null : round((covered * 100.0) / predictions),
                 MIN_REPORTABLE_PREDICTIONS,
-                "Rolling-origin backtest over at most 1000 recent observations per hospital; each prediction uses only earlier observations");
+                "Exploratory rolling-origin backtest: verified source timestamps only; excludes reconstructed, fetch-time and legacy history; training data available at issue time; next-observation lead times 5–60 minutes. Not a validation of hospital rankings");
     }
 
     private Metrics metrics(List<Double> errors) {

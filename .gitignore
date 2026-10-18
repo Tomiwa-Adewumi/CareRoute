@@ -4,3 +4,5 @@ frontend/out/
 frontend/node_modules/
 work/
 .DS_Store
+frontend/test-results/
+frontend/playwright-report/

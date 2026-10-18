@@ -11,5 +11,7 @@ public interface WaitTimeObservationRepository extends JpaRepository<WaitTimeObs
     List<WaitTimeObservationEntity> findTop20ByHospital_IdOrderByObservedAtDesc(String hospitalId);
     List<WaitTimeObservationEntity> findTop1000ByHospital_IdOrderByObservedAtDesc(String hospitalId);
     boolean existsByHospital_IdAndObservedAtAndWaitMinutes(String hospitalId, java.time.Instant observedAt, int waitMinutes);
+    List<WaitTimeObservationEntity> findTop1000ByHospital_IdAndSourceOrderByObservedAtDesc(String hospitalId, String source);
+    Optional<WaitTimeObservationEntity> findTopByHospital_IdAndSourceInOrderByObservedAtDescCollectedAtDesc(String hospitalId, List<String> sources);
     boolean existsByHospital_IdAndSource(String hospitalId, String source);
 }
