@@ -24,6 +24,19 @@ The application separates ingestion, persistence, forecasting, ranking, and pres
 
 [Forecasting design and limitations](docs/forecasting.md) · [Reproduce evaluation](docs/evaluation.md) · [CI](../../actions)
 
+## Live evaluation snapshot
+
+The production evaluator uses rolling-origin validation: for each timestamp, models train only on earlier observations and predict the next one. This avoids temporal leakage and gives every model the same 47 prediction targets. Snapshot from October 18, 2026 after the first public-feed history backfill:
+
+| Model | MAE | RMSE | Median absolute error |
+| --- | ---: | ---: | ---: |
+| Latest observed wait | **11.6 min** | **33.1 min** | **0.0 min** |
+| Linear regression | 20.6 min | 42.8 min | 13.0 min |
+| Exponential smoothing | 23.5 min | 42.3 min | 12.0 min |
+| Moving average | 24.3 min | 48.0 min | 4.0 min |
+
+The simple latest-wait baseline currently wins. Reporting that result is intentional: it prevents claiming an ML improvement the evidence does not support and establishes the benchmark a future model must beat. Metrics update as durable history accumulates at [`/api/model/metrics`](https://careroute-api-main.onrender.com/api/model/metrics).
+
 ## Quick start
 
 Requires Java 17, Maven 3.9+, and Node.js 22. In separate terminals:
@@ -121,6 +134,7 @@ GET /api/recommendations
 GET /api/recommendations?lat=43.6532&lng=-79.3832
 GET /api/model/card
 GET /api/model/metrics
+GET /api/data/health
 GET /actuator/health
 ```
 
