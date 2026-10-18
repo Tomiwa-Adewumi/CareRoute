@@ -1,22 +1,32 @@
 package com.careroute.recommendation;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class TravelTimeService {
-    private final RestClient restClient = RestClient.create();
+    private static final Logger log = LoggerFactory.getLogger(TravelTimeService.class);
+    private final RestClient restClient;
     private final String routingUrl;
     private final Map<String, CacheEntry> cache = new ConcurrentHashMap<>();
 
     public TravelTimeService(@Value("${careroute.routing.url:https://router.project-osrm.org}") String routingUrl) {
         this.routingUrl = routingUrl.replaceAll("/$", "");
+        var requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(Duration.ofSeconds(3));
+        requestFactory.setReadTimeout(Duration.ofSeconds(8));
+        this.restClient = RestClient.builder().requestFactory(requestFactory).build();
     }
 
     public TravelEstimate estimate(double fromLat, double fromLng, Double toLat, Double toLng) {
@@ -26,9 +36,11 @@ public class TravelTimeService {
         if (cached != null && cached.expiresAt().isAfter(Instant.now())) return cached.estimate();
 
         try {
+            String routeUrl = String.format(Locale.ROOT,
+                    "%s/route/v1/driving/%.6f,%.6f;%.6f,%.6f?overview=false&alternatives=false&steps=false",
+                    routingUrl, fromLng, fromLat, toLng, toLat);
             var response = restClient.get()
-                    .uri(routingUrl + "/route/v1/driving/{fromLng},{fromLat};{toLng},{toLat}?overview=false&alternatives=false&steps=false",
-                            fromLng, fromLat, toLng, toLat)
+                    .uri(URI.create(routeUrl))
                     .retrieve().body(RouteResponse.class);
             if (response != null && response.routes() != null && !response.routes().isEmpty()) {
                 Route route = response.routes().get(0);
@@ -39,8 +51,8 @@ public class TravelTimeService {
                 cache.put(key, new CacheEntry(estimate, Instant.now().plus(Duration.ofMinutes(5))));
                 return estimate;
             }
-        } catch (RuntimeException ignored) {
-            // The deterministic fallback keeps recommendations available during routing outages.
+        } catch (RuntimeException exception) {
+            log.warn("Road routing unavailable; using geographic fallback: {}", exception.getMessage());
         }
 
         double distanceKm = haversineKm(fromLat, fromLng, toLat, toLng);
