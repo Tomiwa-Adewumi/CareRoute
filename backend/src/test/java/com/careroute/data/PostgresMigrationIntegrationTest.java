@@ -22,7 +22,7 @@ class PostgresMigrationIntegrationTest {
     void flywayCreatesAndValidatesProductionSchema() {
         Integer migrations = jdbc.queryForObject("select count(*) from flyway_schema_history where success", Integer.class);
         Integer coreTables = jdbc.queryForObject("select count(*) from information_schema.tables where table_schema='public' and table_name in ('hospitals','wait_time_observations')", Integer.class);
-        assertThat(migrations).isEqualTo(2);
+        assertThat(migrations).isEqualTo(3);
         assertThat(coreTables).isEqualTo(2);
     }
 }

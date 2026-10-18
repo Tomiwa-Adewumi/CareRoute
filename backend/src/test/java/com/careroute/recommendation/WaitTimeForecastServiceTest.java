@@ -28,6 +28,14 @@ class WaitTimeForecastServiceTest {
         assertThat(forecast.model()).isEqualTo("LINEAR_REGRESSION_V1");
     }
 
+    @Test void arrivalHorizonIncludesObservationAge() {
+        var h = new HospitalEntity("h", "Hospital", "Toronto", "ON", null, 43.6, -79.4, true, false, true);
+        Instant latest = Instant.parse("2026-01-01T12:00:00Z");
+        var history = List.of(observation(h, 60, latest), observation(h, 50, latest.minusSeconds(600)), observation(h, 40, latest.minusSeconds(1200)));
+        // Request at 12:20 with 10 minutes travel must predict 12:30, not 12:10.
+        assertThat(service.predictAt(history, latest.plusSeconds(1800)).predictedWaitMinutes()).isEqualTo(90);
+    }
+
     private WaitTimeObservationEntity observation(HospitalEntity hospital, int wait, Instant observedAt) {
         return new WaitTimeObservationEntity(hospital, wait, observedAt, observedAt, "TEST", null);
     }

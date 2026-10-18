@@ -19,6 +19,18 @@ public class HospitalEntity {
     private boolean pediatricEmergency;
     private boolean active;
 
+    private Boolean openNow;
+    private boolean waitAvailable;
+    private java.time.Instant lastSeenAt;
+
+    public Boolean getOpenNow() { return openNow; }
+    public boolean isWaitAvailable() { return waitAvailable; }
+    public java.time.Instant getLastSeenAt() { return lastSeenAt; }
+    public void updateAvailability(Boolean openNow, boolean waitAvailable, java.time.Instant lastSeenAt) {
+        this.openNow = openNow;
+        this.waitAvailable = waitAvailable;
+        this.lastSeenAt = lastSeenAt;
+    }
     protected HospitalEntity() {}
 
     public HospitalEntity(String id, String name, String city, String province, String address,

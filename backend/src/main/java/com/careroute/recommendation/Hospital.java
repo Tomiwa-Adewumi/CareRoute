@@ -5,18 +5,20 @@ import java.time.Instant;
 public record Hospital(
         String id,
         String name,
-        int waitMinutes,
-        int predictedWaitMinutes,
-        int predictionLowerMinutes,
-        int predictionUpperMinutes,
+        Integer waitMinutes,
+        Integer predictedWaitMinutes,
+        Integer predictionLowerMinutes,
+        Integer predictionUpperMinutes,
         int forecastSampleCount,
         String forecastModel,
-        int travelMinutes,
-        double travelDistanceKm,
+        Integer travelMinutes,
+        Double travelDistanceKm,
         String travelSource,
         Double latitude,
         Double longitude,
         Instant observedAt,
         boolean adultEmergency,
-        boolean pediatricEmergency) {
+        boolean pediatricEmergency,
+        String unavailableReason,
+        String timestampSource) {
 }

@@ -1,42 +1,29 @@
 package com.careroute.recommendation;
-
 import org.junit.jupiter.api.Test;
-
-import java.time.Instant;
+import java.time.*;
 import java.util.List;
-
 import static org.assertj.core.api.Assertions.assertThat;
-
 class RecommendationServiceTest {
-
-    private final RecommendationService service = new RecommendationService();
-
-    @Test
-    void ranksLowerExpectedTimeToCareFirst() {
-        Instant now = Instant.now();
-        Hospital faster = hospital("a", "Faster", 60, 10, now);
-        Hospital slower = hospital("b", "Slower", 80, 15, now);
-
-        var ranked = service.rank(List.of(slower, faster));
-
-        assertThat(ranked.get(0).hospital().id()).isEqualTo("a");
+    private final Instant now = Instant.parse("2026-01-01T12:00:00Z");
+    private final RecommendationService service = new RecommendationService(Clock.fixed(now, ZoneOffset.UTC));
+    @Test void ranksLowerReportedTimeFirst() {
+        var ranked = service.rank(List.of(hospital("slow", 80, now), hospital("fast", 40, now)));
+        assertThat(ranked.get(0).hospital().id()).isEqualTo("fast");
+        assertThat(ranked.get(0).score()).isEqualTo(45);
     }
-
-    @Test
-    void staleDataReceivesPenalty() {
-        Instant now = Instant.now();
-        Hospital fresh = hospital("fresh", "Fresh", 60, 10, now);
-        Hospital stale = hospital("stale", "Stale", 60, 10, now.minusSeconds(60 * 60));
-
-        var ranked = service.rank(List.of(stale, fresh));
-
+    @Test void excludesDayOldLowWaitRatherThanLettingItWin() {
+        var ranked = service.rank(List.of(hospital("old", 10, now.minusSeconds(86400)), hospital("fresh", 100, now)));
         assertThat(ranked.get(0).hospital().id()).isEqualTo("fresh");
-        assertThat(ranked.get(1).score()).isGreaterThan(ranked.get(0).score());
+        assertThat(ranked.get(1).score()).isNull();
+        assertThat(ranked.get(1).status()).isEqualTo("UNAVAILABLE");
     }
-
-    private Hospital hospital(String id, String name, int wait, int travel, Instant observedAt) {
-        return new Hospital(id, name, wait, wait, wait - 10, wait + 10, 4,
-                "LINEAR_REGRESSION_V1", travel, 5.0, "TEST", 43.65, -79.38,
-                observedAt, true, false);
+    @Test void appliesPenaltyWithinFreshnessWindow() {
+        var score = service.rank(List.of(hospital("h", 40, now.minusSeconds(600)))).get(0);
+        assertThat(score.scoreBreakdown().freshnessPenaltyMinutes()).isEqualTo(2);
+        assertThat(score.score()).isEqualTo(47);
+    }
+    private Hospital hospital(String id, int wait, Instant at) {
+        return new Hospital(id, id, wait, wait, null, null, 1, "LATEST_WAIT_BASELINE", 5, 2.0,
+                "OSRM_ROUTE", 43.65, -79.38, at, true, false, null, "ER_COMPASS_OBSERVED");
     }
 }

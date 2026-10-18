@@ -30,7 +30,7 @@ public class IngestionHealthService {
 
     void failure(Exception exception) {
         lastAttempt = Instant.now();
-        lastError = exception.getClass().getSimpleName() + ": " + exception.getMessage();
+        lastError = exception.getClass().getSimpleName();
         consecutiveFailures.incrementAndGet();
     }
 

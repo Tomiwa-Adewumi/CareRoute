@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "CareRoute",
-  description: "Explainable emergency department recommendations based on travel time, wait time, and data freshness.",
+  description: "Compare available reported adult emergency-department waits and estimated travel, with explicit data limitations.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

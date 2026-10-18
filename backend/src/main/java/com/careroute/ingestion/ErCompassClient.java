@@ -24,23 +24,27 @@ public class ErCompassClient {
     private final String endpoint;
 
     public ErCompassClient(@Value("${careroute.ingestion.ercompass-url:https://ercompass.ca/api/current?province=ON&sort=wait}") String endpoint) {
-        this.restClient = RestClient.create();
+        var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(java.time.Duration.ofSeconds(3));
+        factory.setReadTimeout(java.time.Duration.ofSeconds(8));
+        this.restClient = RestClient.builder().requestFactory(factory).build();
         this.endpoint = endpoint;
     }
 
     public List<LiveWait> fetchCurrent() {
         JsonNode root = restClient.get().uri(endpoint).retrieve().body(JsonNode.class);
-        if (root == null) return List.of();
+        if (root == null) throw new IllegalStateException("Empty feed response");
 
         JsonNode rows = locateRows(root);
-        if (!rows.isArray()) return List.of();
+        if (!rows.isArray()) throw new IllegalStateException("Unexpected feed format");
 
         List<LiveWait> waits = new ArrayList<>();
         for (JsonNode row : rows) {
             String name = text(row, "name", "hospital", "hospital_name", "facility_name");
             String city = text(row, "city", "municipality");
             Integer waitMinutes = integer(row, "wait_minutes", "waitMinutes", "current_wait_minutes", "currentWaitMinutes", "wait");
-            if (name == null || waitMinutes == null || waitMinutes < 0) continue;
+            if (name == null) continue;
+            if (waitMinutes != null && (waitMinutes < 0 || waitMinutes > 720)) waitMinutes = null;
             String id = slug(name);
             double[] fallbackCoordinates = TORONTO_COORDINATES.get(id);
             Double latitude = decimal(row, "latitude", "lat");
@@ -50,10 +54,17 @@ public class ErCompassClient {
                 if (longitude == null) longitude = fallbackCoordinates[1];
             }
 
+            if (latitude != null && (!Double.isFinite(latitude) || Math.abs(latitude) > 90)) latitude = null;
+            if (longitude != null && (!Double.isFinite(longitude) || Math.abs(longitude) > 180)) longitude = null;
+            Instant observed = instant(row, "observed_at", "as_of", "updated_at", "last_updated", "timestamp");
+            String source = observed == null ? "ER_COMPASS_FETCH_TIME" : "ER_COMPASS_OBSERVED";
+            if (observed == null) observed = instant(row, "fetched_at");
+            if (observed == null || observed.isAfter(Instant.now().plusSeconds(60))) waitMinutes = null;
+            boolean emergency = "er".equalsIgnoreCase(text(row, "kind")) && bool(row, "pediatric") != null;
+            boolean pediatric = Boolean.TRUE.equals(bool(row, "pediatric"));
             waits.add(new LiveWait(
                     id, name, city, text(row, "province"), text(row, "address"), latitude, longitude,
-                    waitMinutes, instant(row, "observed_at", "as_of", "fetched_at", "updated_at", "last_updated", "timestamp"),
-                    integerList(row, "spark"), endpoint));
+                    waitMinutes, observed, List.of(), endpoint, emergency, pediatric, bool(row, "open_now"), source));
         }
         return waits;
     }
@@ -89,7 +100,10 @@ public class ErCompassClient {
         for (String key : keys) {
             JsonNode value = row.get(key);
             if (value == null || value.isNull()) continue;
-            if (value.isNumber()) return value.asInt();
+            if (value.isNumber()) {
+                double number = value.asDouble();
+                return Double.isFinite(number) && number >= 0 && number <= 720 ? (int) Math.round(number) : null;
+            }
             String raw = value.asText().trim();
             try { return Integer.parseInt(raw); } catch (NumberFormatException ignored) {}
             Matcher matcher = HOURS_MINUTES.matcher(raw);
@@ -108,17 +122,12 @@ public class ErCompassClient {
             if (raw == null) continue;
             try { return Instant.parse(raw); } catch (Exception ignored) {}
         }
-        return Instant.now();
+        return null;
     }
 
-    private List<Integer> integerList(JsonNode row, String key) {
-        JsonNode values = row.get(key);
-        if (values == null || !values.isArray()) return List.of();
-        List<Integer> result = new ArrayList<>();
-        for (JsonNode value : values) {
-            if (value.isNumber() && value.asDouble() >= 0) result.add((int) Math.round(value.asDouble()));
-        }
-        return List.copyOf(result);
+    private Boolean bool(JsonNode row, String key) {
+        JsonNode value = row.get(key);
+        return value != null && value.isBoolean() ? value.asBoolean() : null;
     }
 
     private String slug(String value) {
@@ -127,6 +136,14 @@ public class ErCompassClient {
     }
 
     public record LiveWait(String id, String name, String city, String province, String address,
-                           Double latitude, Double longitude, int waitMinutes, Instant observedAt,
-                           List<Integer> recentWaits, String sourceUrl) {}
+                           Double latitude, Double longitude, Integer waitMinutes, Instant observedAt,
+                           List<Integer> recentWaits, String sourceUrl, boolean emergency, boolean pediatric,
+                           Boolean openNow, String observationSource) {
+        public LiveWait(String id, String name, String city, String province, String address,
+                        Double latitude, Double longitude, Integer waitMinutes, Instant observedAt,
+                        List<Integer> recentWaits, String sourceUrl) {
+            this(id, name, city, province, address, latitude, longitude, waitMinutes, observedAt,
+                    recentWaits, sourceUrl, true, false, true, "ER_COMPASS_OBSERVED");
+        }
+    }
 }

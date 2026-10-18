@@ -1,29 +1,29 @@
 # Reproducing evaluation
 
-## Deterministic synthetic check
-
 Run `mvn -Dtest=ModelEvaluationServiceTest test` from `backend/`.
-The fixture contains one hospital with waits 40, 50, 60, 70 minutes at
-2026-01-01 00:00, 00:10, 00:20, 00:30 UTC. The first three observations train
-the model; the fourth is held out. Expected regression MAE: 0 minutes;
-latest-wait baseline MAE: 10 minutes. There is one out-of-sample prediction,
-so status remains `COLLECTING_HISTORY`. This checks implementation behavior,
-not real-world predictive quality.
 
-## Live report
+The deterministic fixtures check:
 
-With the backend running and collecting observations:
+- Four observations produce one eligible prediction, but errors and coverage remain null because the reporting threshold is ten.
+- Fourteen observations, ten minutes apart with waits increasing by ten minutes, produce eleven targets, regression MAE 0 and latest-wait MAE 10.
+- History collected after a target cannot be used to predict that target.
+
+These synthetic checks establish implementation behavior, not real-world accuracy.
+
+## Primary protocol
+
+For each active Ontario facility, the evaluator reads at most 1,000 observations whose source is `ER_COMPASS_OBSERVED`. Legacy `ER_COMPASS`, `ER_COMPASS_SPARK_BACKFILL`, and `ER_COMPASS_FETCH_TIME` rows are excluded. No timestamp is reconstructed from a sparkline.
+
+Targets are visited in timestamp order. Training uses at most twenty preceding rows with strictly earlier observation timestamps and collection times no later than the target. At least three eligible history rows are required. All compared methods use identical targets. The forecast issue time is the latest collection time in the training window; targets must be 5–60 minutes after that issue time. Regression predicts at the target's explicit timestamp, including any age of the latest observed value. Conflicting revisions sharing an observation timestamp are excluded entirely; near-duplicate targets outside the lead-time window are excluded too.
+
+The endpoint returns aggregate MAE, RMSE, median absolute error and empirical heuristic-range coverage only after ten eligible targets. Counts remain visible beforehand. `storedObservations` counts eligible observations in the bounded query, not all database rows. `EVALUATED` means the reporting threshold was met; it is not a validation certificate.
+
+This evaluates the next observed reported wait. It does not directly evaluate patient outcomes or hospital rankings. Hospital, time-of-day and fixed-arrival-horizon breakdowns and prospective ranking evaluation are required before model promotion.
+
+## Capture a report
 
 ```bash
 python3 scripts/evaluation_report.py http://localhost:8080 > evaluation-report.json
 ```
 
-The report records capture time, endpoint, and the exact returned metrics.
-The endpoint evaluates at most 1,000 recent observations per hospital with
-up to 20 preceding observations per prediction. It predicts the next
-observed wait, not a patient's clinical wait. `storedObservations` counts
-observations in that bounded window. Results vary as new data arrives.
-Keep the JSON together with the code commit and a database snapshot when
-reproducing a historical run. Do not present the synthetic fixture as a
-production accuracy result. Hospital/time-of-day/horizon breakdowns remain
-future work; the current endpoint reports aggregate errors and coverage.
+Keep the report, code commit, configuration and a database snapshot together for historical reproduction. Current reports may remain in `COLLECTING_HISTORY` if the source lacks verified observation timestamps. The older 47-target backfilled snapshot is not comparable with this stricter protocol and must not be described as validated production accuracy.

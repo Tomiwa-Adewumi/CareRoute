@@ -24,14 +24,14 @@ public class ModelController {
     @GetMapping("/card")
     public Map<String, Object> modelCard() {
         return Map.of(
-                "name", "Per-hospital wait-at-arrival forecaster",
-                "version", "LINEAR_REGRESSION_V1",
-                "type", "Ordinary least squares regression",
+                "name", "Reported-wait comparison baseline",
+                "version", "LATEST_WAIT_BASELINE",
+                "type", "Latest reported wait; regression is an offline challenger",
                 "comparisonModel", "EXPONENTIAL_SMOOTHING_V1 (alpha=0.5)",
-                "intendedUse", "Rank Toronto emergency departments by estimated total time to care",
+                "intendedUse", "Compare available adult emergency-department reported waits and estimated travel",
                 "notIntendedFor", List.of("diagnosis", "triage", "clinical decision-making"),
-                "features", List.of("observation timestamp", "recent reported waits", "travel-time forecast horizon"),
-                "guardrails", List.of("three-sample minimum", "current-wait fallback", "0–720 minute bounds", "±60 minute extrapolation cap"),
+                "features", List.of("latest reported wait", "data age", "optional travel estimate"),
+                "guardrails", List.of("30-minute freshness limit", "verified open adult emergency facilities", "unknown travel excluded from personalized ranking", "unavailable facilities shown without scores"),
                 "knownLimitations", List.of("no traffic routing", "no staffing or acuity features", "not clinically validated"));
     }
 }

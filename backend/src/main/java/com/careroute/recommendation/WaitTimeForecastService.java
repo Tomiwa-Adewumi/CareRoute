@@ -9,6 +9,12 @@ import java.util.List;
 @Service
 public class WaitTimeForecastService {
 
+    public Forecast predictAt(List<WaitTimeObservationEntity> newestFirst, java.time.Instant arrival) {
+        if (newestFirst.isEmpty()) return predict(newestFirst, 0);
+        long minutes = Math.max(0, Duration.between(newestFirst.get(0).getObservedAt(), arrival).toMinutes());
+        return predict(newestFirst, (int) Math.min(1440, minutes));
+    }
+
     public Forecast predict(List<WaitTimeObservationEntity> newestFirst, int travelMinutes) {
         if (newestFirst.isEmpty()) return new Forecast(0, 0, 0, 0, "NO_DATA");
 

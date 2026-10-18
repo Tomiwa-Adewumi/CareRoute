@@ -1,43 +1,41 @@
 # CareRoute architecture
 
-## System overview
-
 ```mermaid
 flowchart LR
-  Feed[ER Compass current feed + recent sparkline] --> Ingest[Scheduled ingestion]
-  Ingest --> Quality[Validation + deduplication + health state]
-  Quality --> Neon[(Neon PostgreSQL)]
-  Neon --> OLS[Per-hospital OLS forecast]
-  Neon --> Eval[Rolling-origin evaluator]
-  Eval --> Compare[Latest wait + moving average + exponential smoothing]
-  Location[Browser geolocation] --> Route[OSRM road routing + 5-minute cache]
-  Route --> Rank[Wait + travel + freshness score]
-  OLS --> Rank
-  Rank --> API[Spring Boot API]
-  API --> UI[Next.js dashboard]
+  Feed[Public feed] --> Parse[Waits, facility metadata, timestamp provenance]
+  Parse --> Ingest[Transactional ingestion and deduplication]
+  Ingest --> DB[(PostgreSQL and Flyway)]
+  DB --> Eligibility[Availability and freshness checks]
+  Location[Optional browser location] --> Routes[Bounded OSRM cache and distance fallback]
+  Eligibility --> Compare[Latest wait plus travel and freshness]
+  Routes --> Compare
+  DB --> Eval[Verified timestamp benchmark]
+  Compare --> UI[Next.js comparison]
+  Eval --> UI
 ```
 
-## Data lifecycle
+## Ingestion and eligibility
 
-1. The ingestion job polls the normalized public feed every ten minutes.
-2. On its first successful observation for a hospital, it imports the feed's real 12-point recent-history sparkline. The feed does not expose timestamps for those points, so CareRoute reconstructs 15-minute timestamps ending at `fetched_at` and labels every row `ER_COMPASS_SPARK_BACKFILL`.
-3. A database uniqueness constraint and application-level check make ingestion idempotent.
-4. Flyway owns the production schema. Hibernate validates it but does not mutate it.
-5. Neon retains observations across Render deployments.
+Network ingestion has explicit connection/read timeouts and occurs outside the database transaction. Facility updates and observations commit together. Success is recorded only after transaction completion; network and persistence failures update ingestion health without returning exception URLs or credentials.
 
-## Online request path
+A successful feed snapshot marks missing facilities as currently unavailable. Rows with missing waits are retained as facilities but do not create observations. Emergency type, pediatric designation and opening status determine eligibility; unknown metadata fails closed. Availability, last feed presence and observation freshness are checked before routing. V3 initially marks legacy facilities unavailable until refreshed.
 
-1. The browser sends coordinates only with the recommendation request.
-2. The routing adapter requests road distance and duration from OSRM. Results are cached for five minutes; a deterministic Haversine estimate keeps the API available during routing outages.
-3. For each hospital, the forecasting service fits OLS over its 20 newest observations and predicts at the route-duration horizon.
-4. The ranking service returns the complete score breakdown: forecast wait, travel duration, and freshness penalty.
+The feed's verified observation timestamps are stored with source `ER_COMPASS_OBSERVED`. If only a parseable `fetched_at` is available, the source is `ER_COMPASS_FETCH_TIME`; the UI labels that distinction. Missing/invalid timestamps cannot become fresh simply because the parser ran now. New ingestion does not import untimestamped sparkline history. Existing backfill and legacy records remain stored but excluded from comparison and benchmark queries.
 
-## Model evaluation
+## Comparison
 
-Every target is evaluated using only earlier observations. OLS is compared on identical targets with the latest observed wait, a three-observation moving average, and simple exponential smoothing with `alpha = 0.5`. The API reports MAE, RMSE, median absolute error, and interval coverage. Metrics remain provisional until ten out-of-sample predictions exist.
+Only open adult emergency facilities with currently available waits and data no more than 30 minutes old receive scores. Unavailable facilities are returned after available facilities, with null scores and explicit reasons. Without user location, travel is null and explicitly excluded. With user location, missing destination coordinates yield unknown travel, making the facility unavailable for personalized comparison.
 
+The production model is the latest-wait baseline. Linear regression is an offline challenger and accepts an explicit arrival timestamp to account for observation age. Heuristic residual ranges have no promised coverage level.
 
-## Privacy and security
-- User coordinates are not persisted.
+The frontend refreshes every minute while visible and on focus. Requests are aborted when superseded or unmounted, and have a 30-second deadline. Failed refreshes remove prior results. Location is opt-in, held in memory, and can be disabled; late geolocation callbacks cannot re-enable a cancelled request.
 
+## Routing and privacy
 
+Routing uses one-second connect and three-second read timeouts. A bounded cache retains at most 1,000 rounded coordinate keys. Road results expire after five minutes; distance fallbacks after 30 seconds. Scheduled cleanup runs every minute even without incoming requests. Network requests do not hold the cache lock. Separate scheduler capacity prevents feed I/O from occupying the only cleanup thread.
+
+Coordinates are not persisted to the application database. OSRM receives coordinates, and infrastructure providers may process request logs. The frontend discloses those boundaries. Routing logs contain exception class names, not exception messages that could include URLs. Tomcat access logs are disabled by default.
+
+## Evaluation and limitations
+
+See [evaluation.md](evaluation.md) for the primary timestamp and reporting rules. The ten-prediction threshold only controls display. Model promotion remains a deliberate engineering decision requiring representative validation and ranking-level evaluation. The application has no clinical suitability model, staffing inputs, live traffic or assurance of complete facility coverage.
