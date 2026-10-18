@@ -86,18 +86,3 @@ The live `/api/model/metrics` endpoint reports stored observations, out-of-sampl
 | Known gaps | No route traffic, staffing, acuity, calibrated clinical uncertainty, or external validation |
 
 The same machine-readable card is available from `GET /api/model/card`.
-
-## ML engineering decisions demonstrated
-
-- Turns a user decision into an explicit, inspectable optimization objective.
-- Separates ingestion, persistence, forecasting, ranking, and presentation layers.
-- Handles sparse data and degenerate features with named fallbacks.
-- Prevents unbounded extrapolation at an operational decision boundary.
-- Returns model metadata with every prediction for observability and UI transparency.
-- Includes a deterministic unit test where waits `40 → 50 → 60` predict `70` ten minutes later.
-- Documents leakage-safe evaluation before claiming model quality.
-
-
-## Planned evaluation
-
-Breakdowns by forecast horizon, hospital, and time of day are planned; the current endpoint reports aggregate metrics only. Evaluation is bounded to the latest 1,000 observations per hospital. `storedObservations` counts that evaluated window, not the entire database.
